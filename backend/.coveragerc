@@ -1,0 +1,13 @@
+[run]
+source =
+    app
+    workers
+
+omit =
+    app/api/*
+    app/main.py
+    app/auth/webauthn.py
+    app/media/metadata.py
+    app/media/thumbnails.py
+    app/media/transcode.py
+    app/media/live_video.py

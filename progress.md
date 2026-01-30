@@ -76,3 +76,4 @@
 - 2026-01-30 05:24 MST - done - Add readiness endpoint with dependency checks
 
 - 2026-01-30 05:29 MST - done - Add metrics counters and hooks
+- 2026-01-30 05:38 MST - done - Add CI workflow and coverage gating

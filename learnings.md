@@ -49,3 +49,6 @@
 - 2026-01-30 05:07 MST: Public share ZIP preparation/status endpoints are `/public/shares/{token}/zip`, returning a share-scoped download URL.
 - 2026-01-30 05:17 MST: Structured logging is JSON formatted with request/job correlation IDs (request IDs default to `X-Request-ID`).
 - 2026-01-30 05:24 MST: Readiness endpoint tests set `app.state.redis_client` to a FakeRedis to avoid needing a real Redis server.
+- 2026-01-30 05:38 MST: Installed pytest-cov in /root/myphotos/.venv to run coverage tests locally.
+- 2026-01-30 05:38 MST: Backend tests warn about unclosed sqlite connections during share link tests; keep an eye on ResourceWarning output.
+- 2026-01-30 05:38 MST: CI coverage uses backend/.coveragerc to focus unit coverage gating on non-API, non-external-tool modules.
