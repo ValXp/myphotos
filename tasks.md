@@ -380,3 +380,89 @@
 - Acceptance criteria:
   - Provide integration test harness that runs against ephemeral DB and Redis.
   - Integration test suites for auth, indexing, media pipeline, albums/shares, downloads, and timeline run in CI.
+### Task 63: Fix failing integration tests (CI)
+- Scope: backend integration tests, CI reproduction, failing test fixes
+- Acceptance criteria:
+  - Identify failing integration tests from GitHub Actions run 21520266566 job 62009219241 (or reproduce locally with the CI command if logs are unavailable).
+    - Github logs:
+        ERROR tests/test_integration_albums_shares.py::AlbumsSharesIntegrationTest::test_share_link_allows_public_album_access - ModuleNotFoundError: No module named 'psycopg2'
+        ERROR tests/test_integration_auth.py::AuthIntegrationTest::test_register_and_login_flow - ModuleNotFoundError: No module named 'psycopg2'
+        ERROR tests/test_integration_downloads.py::DownloadsIntegrationTest::test_public_zip_download_flow - ModuleNotFoundError: No module named 'psycopg2'
+        ERROR tests/test_integration_indexing.py::IndexingIntegrationTest::test_watch_events_enqueue_jobs_in_redis - ModuleNotFoundError: No module named 'psycopg2'
+        ERROR tests/test_integration_media_pipeline.py::MediaPipelineIntegrationTest::test_thumbnail_job_persists_variants - ModuleNotFoundError: No module named 'psycopg2'
+        ERROR tests/test_integration_timeline.py::TimelineIntegrationTest::test_timeline_cursor_pagination - ModuleNotFoundError: No module named 'psycopg2'
+  - Reproduce failures locally using the CI command and environment.
+  - Fix the underlying issues without weakening coverage or skipping tests.
+  - Integration tests pass locally and in CI.
+  - Test command:
+    - `INTEGRATION_TESTS=1 INTEGRATION_DB_URL=postgresql://myphotos:myphotos@localhost:5432/myphotos_test INTEGRATION_REDIS_URL=redis://localhost:6379/0 python -m pytest backend/tests/test_integration_*.py`
+### Task 64: Live Photo linking in ingest pipeline
+- Scope: ingest pipeline (scan + watcher), Live Photo linking, job enqueueing
+- Acceptance criteria:
+  - Live Photo still/video pairs are linked after scan/watch processing (still assets set to type live_photo with live_photo_video_id).
+  - When a still becomes live_photo, a transcode job is enqueued for that still (in addition to metadata/thumb jobs).
+  - New tests cover linking triggered by scan/watch flows and job enqueueing.
+  - Test command: `python -m pytest backend/tests/test_ingest_jobs.py`
+### Task 65: Live Photo video variants during transcode
+- Scope: media transcode pipeline and Live Photo variants
+- Acceptance criteria:
+  - Transcode jobs for live_photo assets also create a live video variant (AssetVariantKind.live_video, profile "live").
+  - `/assets/{id}/live` returns 200 when the live video variant exists for a live_photo asset.
+  - Tests cover live video variant creation using a fake generator (no ffmpeg required).
+  - Test command: `python -m pytest backend/tests/test_live_photos.py`
+### Task 66: Media worker runner with job persistence and retries
+- Scope: worker entrypoint, queue dispatch, Job status updates, retry handling
+- Acceptance criteria:
+  - Add a worker entrypoint (e.g., `backend/workers/media_worker.py`) that registers handlers for metadata, thumbnail, transcode (and live video if present) and processes queue jobs.
+  - Each processed job creates or updates a Job row with status running -> done/failed and payload details.
+  - Retryable media failures use `record_media_job_failure` and re-enqueue with backoff (sleep-based delay is acceptable).
+  - Support a `--once` mode for tests.
+  - Tests verify job status transitions and retry behavior.
+  - Test command: `python -m pytest backend/tests/test_media_worker.py`
+### Task 67: Indexer runner for watched folders
+- Scope: indexer service runner, filesystem watcher loop, optional full scans
+- Acceptance criteria:
+  - Add an indexer entrypoint (e.g., `backend/workers/indexer.py`) that polls `FilesystemWatcher`, applies watch events, and enqueues ingest jobs.
+  - Support `--once` (single poll) and `--scan` (force full scan) flags; default loop uses configurable poll/scan intervals.
+  - Tests verify `--once` processing creates assets and enqueues jobs using a temp folder.
+  - Test command: `python -m pytest backend/tests/test_indexer_runner.py`
+### Task 68: Reverse proxy header support
+- Scope: FastAPI app middleware and configuration
+- Acceptance criteria:
+  - Add middleware so `X-Forwarded-Proto` and `X-Forwarded-Host` are respected when behind a reverse proxy.
+  - Provide a configuration option to control trusted proxy IPs.
+  - Tests verify request URL scheme/host reflect forwarded headers when trusted.
+  - Test command: `python -m pytest backend/tests/test_proxy_headers.py`
+### Task 69: Serve frontend dist with SPA fallback
+- Scope: backend static file serving and SPA routing
+- Acceptance criteria:
+  - Add `FRONTEND_DIST_DIR` configuration; when set to a valid directory, serve static assets from it.
+  - Unknown non-API routes fall back to `index.html` to support client-side routing.
+  - API routes continue to respond normally.
+  - Tests verify `/` and `/share/...` serve the SPA while `/health` remains an API response.
+  - Test command: `python -m pytest backend/tests/test_frontend_static.py`
+### Task 70: Owner share management UI and share listing endpoint
+- Scope: share link listing API and owner album UI
+- Acceptance criteria:
+  - Add `GET /albums/{id}/shares` to list share links for an album.
+  - Album detail UI shows share links, allows creating new links, revoking existing ones, and copying the public URL.
+  - Backend tests cover share listing access control; frontend tests cover create/revoke flows.
+  - Test commands: `python -m pytest backend/tests/test_share_links.py` and `npm test`
+### Task 71: Public original downloads
+- Scope: public original download endpoint and UI
+- Acceptance criteria:
+  - Add `GET /public/shares/{token}/assets/{asset_id}/original` with album membership checks and cache headers.
+  - Public album UI exposes a "Download original" action per asset using the new endpoint.
+  - Tests ensure downloads are restricted to assets within the shared album.
+  - Test commands: `python -m pytest backend/tests/test_public_originals.py` and `npm test`
+### Task 72: Viewer uses originals for photo zoom (owner)
+- Scope: viewer photo rendering URLs
+- Acceptance criteria:
+  - Update the viewer to use original image URLs for photo assets (keep poster thumbnails for videos).
+  - Owner viewer uses `/assets/{id}/original` for photos without changing video playback.
+  - Frontend tests assert photo viewer uses original URLs and video poster remains a thumbnail.
+  - Test command: `npm test`
+### Task 73: Update README.md
+- Make sure the README.md is up to date with the latest changes we made
+- Acceptance criteria:
+  - Updated README.md is commited and pushed to git
