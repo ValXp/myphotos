@@ -35,7 +35,7 @@ VIDEO_RENDITION_PROFILES: tuple[VariantProfile, ...] = (
     VariantProfile(
         "360p",
         AssetVariantKind.video_transcode,
-        "mp4",
+        "m3u8",
         width=640,
         height=360,
         video_bitrate_kbps=800,
@@ -44,7 +44,7 @@ VIDEO_RENDITION_PROFILES: tuple[VariantProfile, ...] = (
     VariantProfile(
         "720p",
         AssetVariantKind.video_transcode,
-        "mp4",
+        "m3u8",
         width=1280,
         height=720,
         video_bitrate_kbps=2800,
@@ -53,7 +53,7 @@ VIDEO_RENDITION_PROFILES: tuple[VariantProfile, ...] = (
     VariantProfile(
         "1080p",
         AssetVariantKind.video_transcode,
-        "mp4",
+        "m3u8",
         width=1920,
         height=1080,
         video_bitrate_kbps=5000,

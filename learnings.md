@@ -32,3 +32,4 @@
 - 2026-01-30 00:35 MST: Enqueueing jobs for newly created assets needs a session flush so the asset ID is available for job payloads before commit.
 - 2026-01-30 01:06 MST: exiftool, ffprobe, and ffmpeg are not installed in this environment; metadata integration tests were skipped.
 - 2026-01-30 01:17 MST: pyvips is not installed in the venv; thumbnail integration test is skipped.
+- 2026-01-30 01:24 MST: ffmpeg is not installed; transcode integration test is skipped.
