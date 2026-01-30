@@ -355,3 +355,28 @@
 - Acceptance criteria:
   - Add ZIP download initiation and status UI for public albums.
   - ZIP download starts and completes from the public view, with error handling.
+### Task 58: Structured logging with correlation IDs
+- Scope: structured logging for API and jobs with request/job IDs
+- Acceptance criteria:
+  - Add structured logging for API requests and background jobs.
+  - Logs include correlation IDs for requests and jobs.
+### Task 59: Readiness endpoint
+- Scope: readiness endpoint and dependency checks
+- Acceptance criteria:
+  - Implement a `/ready` endpoint to report readiness status.
+  - `/ready` reports dependency readiness (DB/Redis) in its response.
+### Task 60: Metrics counters and placeholders
+- Scope: metrics hook points for API requests and jobs
+- Acceptance criteria:
+  - Add basic counters for API requests and job processing.
+  - Provide placeholder hooks for future metrics export.
+### Task 61: CI enforcement for tests and coverage
+- Scope: CI pipeline configuration for tests and coverage gating
+- Acceptance criteria:
+  - Add CI configuration that runs tests and enforces unit coverage >= 90%.
+  - CI fails when unit coverage is below the threshold.
+### Task 62: Integration test harness
+- Scope: integration test harness for ephemeral DB/Redis
+- Acceptance criteria:
+  - Provide integration test harness that runs against ephemeral DB and Redis.
+  - Integration test suites for auth, indexing, media pipeline, albums/shares, downloads, and timeline run in CI.
