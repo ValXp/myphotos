@@ -34,3 +34,4 @@
 - 2026-01-30 01:17 MST: pyvips is not installed in the venv; thumbnail integration test is skipped.
 - 2026-01-30 01:24 MST: ffmpeg is not installed; transcode integration test is skipped.
 - 2026-01-30 01:39 MST: Live video variant creation needs a session flush so new AssetVariant rows are queryable in tests.
+- 2026-01-30 02:20 MST: Added auth coverage for /assets endpoints; no new environment issues.

@@ -49,3 +49,4 @@
 - 2026-01-30 02:04 MST - done - Add asset detail endpoint and tests
 - 2026-01-30 02:10 MST - done - Add asset thumbnail and original endpoints
 - 2026-01-30 02:17 MST - done - Add asset stream and live endpoints
+- 2026-01-30 02:20 MST - done - Add library access control tests
