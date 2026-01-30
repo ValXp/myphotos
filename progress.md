@@ -60,3 +60,4 @@
 - 2026-01-30 03:14 MST - done - Add passkey sign-in UI and session bootstrap
 - 2026-01-30 03:24 MST - done - Add timeline infinite scroll and tests
 - 2026-01-30 03:34 MST - done - Add album list and album grid views
+- 2026-01-30 03:47 MST - done - Add multi-select album item actions
