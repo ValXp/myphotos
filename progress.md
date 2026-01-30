@@ -37,3 +37,4 @@
 - 2026-01-30 00:35 MST - done - Enqueue ingest jobs for new or changed assets
 - 2026-01-30 00:45 MST - done - Add admin scan endpoints with backoff
 - 2026-01-30 00:49 MST - done - Add ingest flow integration tests
+- 2026-01-30 00:52 MST - done - Add variant profiles and derived mapping
