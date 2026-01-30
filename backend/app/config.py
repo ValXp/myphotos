@@ -8,6 +8,9 @@ from typing import Any, Mapping, Sequence
 
 DEFAULT_DB_URL = "postgresql://myphotos:myphotos@localhost:5432/myphotos"
 DEFAULT_REDIS_URL = "redis://localhost:6379/0"
+DEFAULT_WEBAUTHN_RP_NAME = "myphotos"
+DEFAULT_SESSION_TTL_SECONDS = 60 * 60 * 24
+DEFAULT_SESSION_COOKIE_NAME = "myphotos_session"
 
 
 class ConfigError(ValueError):
@@ -33,6 +36,13 @@ class RedisConfig:
 
 
 @dataclass(frozen=True)
+class WebAuthnConfig:
+    rp_id: str
+    rp_name: str
+    origins: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class AppConfig:
     env: str
     host: str
@@ -41,11 +51,19 @@ class AppConfig:
 
 
 @dataclass(frozen=True)
+class SessionConfig:
+    ttl_seconds: int
+    cookie_name: str
+
+
+@dataclass(frozen=True)
 class Config:
     paths: PathsConfig
     database: DatabaseConfig
     redis: RedisConfig
+    webauthn: WebAuthnConfig
     app: AppConfig
+    session: SessionConfig
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -57,11 +75,20 @@ class Config:
             },
             "database": {"url": self.database.url},
             "redis": {"url": self.redis.url},
+            "webauthn": {
+                "rp_id": self.webauthn.rp_id,
+                "rp_name": self.webauthn.rp_name,
+                "origins": list(self.webauthn.origins),
+            },
             "app": {
                 "env": self.app.env,
                 "host": self.app.host,
                 "port": self.app.port,
                 "log_level": self.app.log_level,
+            },
+            "session": {
+                "ttl_seconds": self.session.ttl_seconds,
+                "cookie_name": self.session.cookie_name,
             },
         }
 
@@ -91,6 +118,18 @@ def load_config(environ: Mapping[str, str] | None = None) -> Config:
         port=_int_from_env(env, "APP_PORT", 8000, min_value=1, max_value=65535),
         log_level=_str_from_env(env, "APP_LOG_LEVEL", "INFO"),
     )
+    default_origin = f"http://{app.host}:{app.port}"
+    webauthn = WebAuthnConfig(
+        rp_id=_str_from_env(env, "WEBAUTHN_RP_ID", app.host),
+        rp_name=_str_from_env(env, "WEBAUTHN_RP_NAME", DEFAULT_WEBAUTHN_RP_NAME),
+        origins=tuple(_csv_from_env(env, "WEBAUTHN_ORIGINS", [default_origin])),
+    )
+    session = SessionConfig(
+        ttl_seconds=_int_from_env(
+            env, "SESSION_TTL_SECONDS", DEFAULT_SESSION_TTL_SECONDS, min_value=1
+        ),
+        cookie_name=_str_from_env(env, "SESSION_COOKIE_NAME", DEFAULT_SESSION_COOKIE_NAME),
+    )
 
     return Config(
         paths=PathsConfig(
@@ -101,7 +140,9 @@ def load_config(environ: Mapping[str, str] | None = None) -> Config:
         ),
         database=database,
         redis=redis,
+        webauthn=webauthn,
         app=app,
+        session=session,
     )
 
 
@@ -154,6 +195,24 @@ def _path_from_env(
 
 def _normalize_path(value: str | Path) -> Path:
     return Path(value).expanduser().resolve(strict=False)
+
+
+def _csv_from_env(env: Mapping[str, str], key: str, default: Sequence[str]) -> list[str]:
+    raw = env.get(key)
+    if raw is None:
+        return list(default)
+    items = [item.strip() for item in raw.split(",")]
+    values = [item for item in items if item]
+    if not values:
+        raise ConfigError(f"{key} must contain at least one value")
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        deduped.append(value)
+    return deduped
 
 
 def _validate_unique_paths(paths: Sequence[tuple[str, Path]]) -> None:

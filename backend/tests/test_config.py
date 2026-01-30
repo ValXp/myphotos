@@ -5,6 +5,9 @@ from pathlib import Path
 from app.config import (
     DEFAULT_DB_URL,
     DEFAULT_REDIS_URL,
+    DEFAULT_SESSION_COOKIE_NAME,
+    DEFAULT_SESSION_TTL_SECONDS,
+    DEFAULT_WEBAUTHN_RP_NAME,
     ConfigError,
     load_config,
 )
@@ -26,6 +29,11 @@ class ConfigLoaderTest(unittest.TestCase):
             self.assertEqual(config.app.host, "127.0.0.1")
             self.assertEqual(config.app.port, 8000)
             self.assertEqual(config.app.log_level, "INFO")
+            self.assertEqual(config.webauthn.rp_id, "127.0.0.1")
+            self.assertEqual(config.webauthn.rp_name, DEFAULT_WEBAUTHN_RP_NAME)
+            self.assertEqual(config.webauthn.origins, ("http://127.0.0.1:8000",))
+            self.assertEqual(config.session.ttl_seconds, DEFAULT_SESSION_TTL_SECONDS)
+            self.assertEqual(config.session.cookie_name, DEFAULT_SESSION_COOKIE_NAME)
 
     def test_load_config_overrides_paths(self) -> None:
         with tempfile.TemporaryDirectory() as root:
@@ -73,5 +81,38 @@ class ConfigLoaderTest(unittest.TestCase):
             self.assertIn('"paths"', rendered)
             self.assertIn('"database"', rendered)
             self.assertIn('"redis"', rendered)
+            self.assertIn('"webauthn"', rendered)
             self.assertIn('"app"', rendered)
+            self.assertIn('"session"', rendered)
             self.assertIn('"port": 8080', rendered)
+
+    def test_webauthn_overrides(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            config = load_config(
+                {
+                    "DATA_ROOT": root,
+                    "WEBAUTHN_RP_ID": "photos.local",
+                    "WEBAUTHN_RP_NAME": "My Photos",
+                    "WEBAUTHN_ORIGINS": "https://photos.local, https://photos.corp",
+                }
+            )
+
+            self.assertEqual(config.webauthn.rp_id, "photos.local")
+            self.assertEqual(config.webauthn.rp_name, "My Photos")
+            self.assertEqual(
+                config.webauthn.origins,
+                ("https://photos.local", "https://photos.corp"),
+            )
+
+    def test_session_overrides(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            config = load_config(
+                {
+                    "DATA_ROOT": root,
+                    "SESSION_TTL_SECONDS": "7200",
+                    "SESSION_COOKIE_NAME": "photos_session",
+                }
+            )
+
+            self.assertEqual(config.session.ttl_seconds, 7200)
+            self.assertEqual(config.session.cookie_name, "photos_session")

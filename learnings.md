@@ -22,3 +22,4 @@
 - 2026-01-29 23:05 MST: SQLAlchemy relationship annotations cannot use a stringified union ("AlbumZip" | None); avoid `| None` in quotes to prevent MappedAnnotationError.
 - 2026-01-29 23:11 MST: Queue tests require the `redis` package; install backend deps in the venv before running the suite.
 - 2026-01-29 23:17 MST: Health endpoint tests use FastAPI TestClient; install fastapi/httpx in the venv before running the suite.
+- 2026-01-29 23:25 MST: Project venv is at /root/myphotos/.venv; run tests from backend with ../.venv/bin/python.
