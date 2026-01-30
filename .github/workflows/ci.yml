@@ -28,6 +28,54 @@ jobs:
         run: |
           python -m pytest --cov --cov-config=.coveragerc --cov-report=term-missing --cov-fail-under=90
 
+  backend-integration-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: myphotos
+          POSTGRES_PASSWORD: myphotos
+          POSTGRES_DB: myphotos_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U myphotos -d myphotos_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest
+      - name: Run backend integration tests
+        env:
+          INTEGRATION_TESTS: "1"
+          INTEGRATION_DB_URL: postgresql://myphotos:myphotos@localhost:5432/myphotos_test
+          INTEGRATION_REDIS_URL: redis://localhost:6379/0
+        run: |
+          python -m pytest tests/test_integration_*.py
+
   frontend-tests:
     runs-on: ubuntu-latest
     defaults:

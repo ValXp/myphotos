@@ -77,3 +77,4 @@
 
 - 2026-01-30 05:29 MST - done - Add metrics counters and hooks
 - 2026-01-30 05:38 MST - done - Add CI workflow and coverage gating
+- 2026-01-30 05:50 MST - done - Add integration test harness and CI job
