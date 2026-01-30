@@ -19,3 +19,4 @@
 - 2026-01-29 22:50 MST - done - Ignore python cache files
 
 - 2026-01-29 22:55 MST - done - Add config loader and storage layout
+- 2026-01-29 23:05 MST - done - Add core ORM models and Alembic migrations
