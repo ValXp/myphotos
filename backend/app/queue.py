@@ -3,15 +3,19 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass
 import json
+import logging
 from typing import Any, Callable, Protocol
+import uuid
 
 import redis
 
 from app.config import RedisConfig
+from app.observability import job_context
 
 DEFAULT_QUEUE_NAME = "myphotos:jobs"
 NOOP_JOB_NAME = "noop"
 
+logger = logging.getLogger("app.queue")
 
 class QueueError(RuntimeError):
     pass
@@ -29,19 +33,30 @@ class UnknownJobError(QueueError):
 class Job:
     name: str
     payload: dict[str, Any]
+    id: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
-        return {"name": self.name, "payload": self.payload}
+        data: dict[str, Any] = {"name": self.name, "payload": self.payload}
+        if self.id is not None:
+            data["id"] = self.id
+        return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Job":
         name = data.get("name")
         payload = data.get("payload")
+        job_id = data.get("id")
         if not isinstance(name, str) or not name.strip():
             raise InvalidJobError("job name must be a non-empty string")
         if not isinstance(payload, dict):
             raise InvalidJobError("job payload must be a dict")
-        return cls(name=name, payload=payload)
+        if job_id is None:
+            parsed_id = None
+        elif isinstance(job_id, str) and job_id.strip():
+            parsed_id = job_id
+        else:
+            raise InvalidJobError("job id must be a non-empty string")
+        return cls(name=name, payload=payload, id=parsed_id)
 
 
 JobHandler = Callable[[Job], None]
@@ -105,7 +120,8 @@ class Queue:
         self._handlers[name] = handler
 
     def enqueue(self, job: Job) -> None:
-        self._backend.push(self._queue_name, _serialize_job(job))
+        job_with_id = _ensure_job_id(job)
+        self._backend.push(self._queue_name, _serialize_job(job_with_id))
 
     def dequeue(self, timeout: int | None = None) -> Job | None:
         payload = self._backend.pop(self._queue_name, timeout=timeout)
@@ -117,10 +133,32 @@ class Queue:
         job = self.dequeue(timeout)
         if job is None:
             return False
+        job = _ensure_job_id(job)
         handler = self._handlers.get(job.name)
         if handler is None:
+            with job_context(job.id):
+                logger.error(
+                    "job.unknown",
+                    extra={"job_name": job.name, "queue": self._queue_name},
+                )
             raise UnknownJobError(f"no handler registered for {job.name}")
-        handler(job)
+        with job_context(job.id):
+            logger.info(
+                "job.start",
+                extra={"job_name": job.name, "queue": self._queue_name},
+            )
+            try:
+                handler(job)
+            except Exception:
+                logger.exception(
+                    "job.error",
+                    extra={"job_name": job.name, "queue": self._queue_name},
+                )
+                raise
+            logger.info(
+                "job.complete",
+                extra={"job_name": job.name, "queue": self._queue_name},
+            )
         return True
 
 
@@ -136,6 +174,12 @@ def _deserialize_job(payload: str) -> Job:
     if not isinstance(data, dict):
         raise InvalidJobError("job payload must be a JSON object")
     return Job.from_dict(data)
+
+
+def _ensure_job_id(job: Job) -> Job:
+    if job.id is None:
+        return Job(name=job.name, payload=job.payload, id=str(uuid.uuid4()))
+    return job
 
 
 def create_redis_client(config: RedisConfig) -> redis.Redis[str]:

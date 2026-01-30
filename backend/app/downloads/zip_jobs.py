@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
+import logging
 import uuid
 import zipfile
 from typing import Callable
@@ -13,9 +14,11 @@ from sqlalchemy.orm import Session
 from app.config import Config
 from app.db.enums import JobStatus, JobType
 from app.db.models import AlbumItem, AlbumZip, Asset, Job
+from app.observability import job_context
 
 ZIP_DIRNAME = "album_zips"
 
+logger = logging.getLogger("app.jobs.zip")
 
 class ZipError(RuntimeError):
     pass
@@ -60,6 +63,12 @@ def start_album_zip_job(
     session.add(job)
     session.commit()
 
+    with job_context(job.id):
+        logger.info(
+            "job.start",
+            extra={"job_type": job.type.value, "album_id": album_id},
+        )
+
     try:
         assets = _album_assets(session, album_id)
         zip_rel_path = _zip_relative_path(album_id)
@@ -83,6 +92,16 @@ def start_album_zip_job(
         job.payload = payload
         session.add(job)
         session.commit()
+        with job_context(job.id):
+            logger.info(
+                "job.complete",
+                extra={
+                    "job_type": job.type.value,
+                    "album_id": album_id,
+                    "asset_count": len(assets),
+                    "zip_bytes": zip_bytes,
+                },
+            )
         return job
     except Exception as exc:
         session.rollback()
@@ -99,6 +118,11 @@ def start_album_zip_job(
         job.payload = payload
         session.add(job)
         session.commit()
+        with job_context(job.id):
+            logger.exception(
+                "job.error",
+                extra={"job_type": job.type.value, "album_id": album_id, "error": str(exc)},
+            )
         raise ZipFailedError(job, str(exc)) from exc
 
 

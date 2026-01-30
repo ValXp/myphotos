@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import logging
+import time
 from typing import Awaitable, Callable
+from uuid import uuid4
 
 from fastapi import FastAPI, Request, Response
 from sqlalchemy.orm import Session, sessionmaker
@@ -21,7 +24,10 @@ from app.api.health import router as health_router
 from app.api.public import router as public_router
 from app.api.webauthn import router as webauthn_router
 from app.config import Config, load_config
+from app.observability import REQUEST_ID_HEADER, configure_logging, request_context
 from app.queue import Queue, RedisQueueBackend, create_redis_client
+
+logger = logging.getLogger("app.api")
 
 
 def create_app(
@@ -35,6 +41,7 @@ def create_app(
     scan_backoff: ScanBackoffPolicy | None = None,
 ) -> FastAPI:
     resolved = load_config() if config is None else config
+    configure_logging(resolved.app.log_level)
     app = FastAPI(title="myphotos")
     app.state.config = resolved
     app.state.session_store = session_store or create_session_store(resolved)
@@ -48,6 +55,45 @@ def create_app(
     else:
         app.state.db_engine = None
         app.state.db_session_factory = db_session_factory
+
+    @app.middleware("http")
+    async def request_logging_middleware(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        request_id = request.headers.get(REQUEST_ID_HEADER)
+        if request_id is None or not request_id.strip():
+            request_id = uuid4().hex
+        request.state.request_id = request_id
+        start = time.perf_counter()
+        with request_context(request_id):
+            try:
+                response = await call_next(request)
+            except Exception:
+                duration_ms = int((time.perf_counter() - start) * 1000)
+                logger.exception(
+                    "request.error",
+                    extra={
+                        "method": request.method,
+                        "path": request.url.path,
+                        "duration_ms": duration_ms,
+                        "client_host": request.client.host if request.client else None,
+                    },
+                )
+                raise
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            logger.info(
+                "request.complete",
+                extra={
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status_code": response.status_code,
+                    "duration_ms": duration_ms,
+                    "client_host": request.client.host if request.client else None,
+                },
+            )
+        response.headers[REQUEST_ID_HEADER] = request_id
+        return response
 
     @app.middleware("http")
     async def owner_session_middleware(

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import logging
 from typing import Callable, Iterable
 
 from sqlalchemy import select
@@ -12,10 +13,13 @@ from app.db.enums import JobStatus, JobType
 from app.db.models import Job
 from app.ingest.jobs import enqueue_scan_jobs
 from app.ingest.scan import ScanStats
+from app.observability import job_context
 from app.queue import Queue
 
 DEFAULT_LARGE_SCAN_THRESHOLD = 10000
 DEFAULT_SCAN_BACKOFF_SECONDS = 300
+
+logger = logging.getLogger("app.jobs.scan")
 
 
 @dataclass(frozen=True)
@@ -105,6 +109,12 @@ def start_scan(
     session.add(job)
     session.commit()
 
+    with job_context(job.id):
+        logger.info(
+            "job.start",
+            extra={"job_type": job.type.value, "roots": roots_list},
+        )
+
     try:
         stats = enqueue_scan_jobs(session, roots_list, queue)
         finished_at = now()
@@ -119,6 +129,14 @@ def start_scan(
         }
         session.add(job)
         session.commit()
+        with job_context(job.id):
+            logger.info(
+                "job.complete",
+                extra={
+                    "job_type": job.type.value,
+                    "stats": _serialize_stats(stats),
+                },
+            )
         return job
     except Exception as exc:  # pragma: no cover - defensive
         session.rollback()
@@ -132,6 +150,11 @@ def start_scan(
         }
         session.add(job)
         session.commit()
+        with job_context(job.id):
+            logger.exception(
+                "job.error",
+                extra={"job_type": job.type.value, "error": str(exc)},
+            )
         raise ScanFailedError(job, str(exc)) from exc
 
 
