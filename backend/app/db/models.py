@@ -10,6 +10,7 @@ from sqlalchemy import (
     Enum as SQLEnum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     LargeBinary,
     String,
@@ -66,6 +67,9 @@ class Asset(Base):
     __tablename__ = "assets"
     __table_args__ = (
         UniqueConstraint("live_photo_video_id", name="uq_assets_live_photo_video_id"),
+        Index("ix_assets_captured_at", "captured_at"),
+        Index("ix_assets_created_at", "created_at"),
+        Index("ix_assets_lat_lon", "lat", "lon"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid_str)

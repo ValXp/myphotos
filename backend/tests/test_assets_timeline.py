@@ -87,6 +87,111 @@ class TimelinePaginationTest(unittest.TestCase):
         self.assertEqual([item["id"] for item in next_items], [assets[2].id])
         self.assertIsNone(next_body["next_cursor"])
 
+    def test_date_range_filter(self) -> None:
+        base = datetime(2024, 2, 1, tzinfo=timezone.utc)
+        assets = [
+            Asset(
+                id="00000000-0000-0000-0000-000000000103",
+                type=AssetType.photo,
+                captured_at=base,
+                original_path="/tmp/range-a.jpg",
+                original_bytes=10,
+                original_mime="image/jpeg",
+            ),
+            Asset(
+                id="00000000-0000-0000-0000-000000000102",
+                type=AssetType.photo,
+                captured_at=base - timedelta(days=1),
+                original_path="/tmp/range-b.jpg",
+                original_bytes=10,
+                original_mime="image/jpeg",
+            ),
+            Asset(
+                id="00000000-0000-0000-0000-000000000101",
+                type=AssetType.photo,
+                captured_at=base - timedelta(days=5),
+                original_path="/tmp/range-c.jpg",
+                original_bytes=10,
+                original_mime="image/jpeg",
+            ),
+        ]
+        with self.session_factory() as db:
+            db.add_all(assets)
+            db.commit()
+
+        start = base - timedelta(days=2)
+        end = base
+        response = self.client.get(
+            "/assets",
+            params={"start": start.isoformat(), "end": end.isoformat()},
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        items = body["items"]
+        self.assertEqual([item["id"] for item in items], [assets[0].id, assets[1].id])
+
+    def test_bbox_filter(self) -> None:
+        base = datetime(2024, 3, 1, tzinfo=timezone.utc)
+        assets = [
+            Asset(
+                id="00000000-0000-0000-0000-000000000203",
+                type=AssetType.photo,
+                captured_at=base,
+                lat=37.4,
+                lon=-122.1,
+                original_path="/tmp/bbox-a.jpg",
+                original_bytes=10,
+                original_mime="image/jpeg",
+            ),
+            Asset(
+                id="00000000-0000-0000-0000-000000000202",
+                type=AssetType.photo,
+                captured_at=base - timedelta(days=1),
+                lat=40.7,
+                lon=-74.0,
+                original_path="/tmp/bbox-b.jpg",
+                original_bytes=10,
+                original_mime="image/jpeg",
+            ),
+            Asset(
+                id="00000000-0000-0000-0000-000000000201",
+                type=AssetType.photo,
+                captured_at=base - timedelta(days=2),
+                lat=None,
+                lon=None,
+                original_path="/tmp/bbox-c.jpg",
+                original_bytes=10,
+                original_mime="image/jpeg",
+            ),
+            Asset(
+                id="00000000-0000-0000-0000-000000000200",
+                type=AssetType.photo,
+                captured_at=base - timedelta(days=3),
+                lat=37.9,
+                lon=-121.5,
+                original_path="/tmp/bbox-d.jpg",
+                original_bytes=10,
+                original_mime="image/jpeg",
+            ),
+        ]
+        with self.session_factory() as db:
+            db.add_all(assets)
+            db.commit()
+
+        response = self.client.get(
+            "/assets",
+            params={
+                "min_lat": 37.0,
+                "min_lon": -123.0,
+                "max_lat": 38.0,
+                "max_lon": -121.0,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        items = body["items"]
+        self.assertEqual([item["id"] for item in items], [assets[0].id, assets[3].id])
+
 
 if __name__ == "__main__":
     unittest.main()

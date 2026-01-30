@@ -45,3 +45,4 @@
 
 - 2026-01-30 01:50 MST - done - Add media job retry and failure reporting
 - 2026-01-30 01:55 MST - done - Add assets timeline endpoint with cursor pagination
+- 2026-01-30 01:59 MST - done - Add timeline filters and indexes

@@ -23,6 +23,12 @@ router = APIRouter()
 def list_assets(
     cursor: str | None = None,
     limit: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+    start: datetime | None = None,
+    end: datetime | None = None,
+    min_lat: float | None = None,
+    min_lon: float | None = None,
+    max_lat: float | None = None,
+    max_lon: float | None = None,
     db: Session = Depends(get_db),
     _: OwnerSession = Depends(require_owner_session),
 ) -> dict[str, object]:
@@ -30,6 +36,39 @@ def list_assets(
     query = db.query(Asset, sort_ts.label("sort_ts")).order_by(
         sort_ts.desc(), Asset.id.desc()
     )
+    start_dt = _normalize_datetime(start)
+    end_dt = _normalize_datetime(end)
+    if start_dt and end_dt and start_dt > end_dt:
+        raise HTTPException(status_code=400, detail="invalid date range")
+    if start_dt or end_dt:
+        captured_filters = []
+        created_filters = [Asset.captured_at.is_(None)]
+        if start_dt:
+            captured_filters.append(Asset.captured_at >= start_dt)
+            created_filters.append(Asset.created_at >= start_dt)
+        if end_dt:
+            captured_filters.append(Asset.captured_at <= end_dt)
+            created_filters.append(Asset.created_at <= end_dt)
+        query = query.filter(
+            or_(
+                and_(*captured_filters),
+                and_(*created_filters),
+            )
+        )
+    bbox_values = [min_lat, min_lon, max_lat, max_lon]
+    if any(value is not None for value in bbox_values):
+        if any(value is None for value in bbox_values):
+            raise HTTPException(status_code=400, detail="bbox requires all bounds")
+        if min_lat > max_lat or min_lon > max_lon:
+            raise HTTPException(status_code=400, detail="invalid bbox bounds")
+        query = query.filter(
+            Asset.lat.isnot(None),
+            Asset.lon.isnot(None),
+            Asset.lat >= min_lat,
+            Asset.lat <= max_lat,
+            Asset.lon >= min_lon,
+            Asset.lon <= max_lon,
+        )
     if cursor:
         try:
             cursor_ts, cursor_id = _decode_cursor(cursor)
@@ -71,6 +110,14 @@ def _isoformat(value: datetime | None) -> str | None:
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
     return value.isoformat()
+
+
+def _normalize_datetime(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
 
 
 def _encode_cursor(sort_ts: datetime, asset_id: str) -> str:
