@@ -29,3 +29,4 @@
 - 2026-01-29 23:47 MST - done - Add WebAuthn login options endpoint
 
 - 2026-01-29 23:52 MST - done - Add WebAuthn login verification and session cookie
+- 2026-01-29 23:57 MST - done - Add logout endpoint and auth guard

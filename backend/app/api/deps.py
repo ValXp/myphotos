@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Generator
 
-from fastapi import Request
+from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.auth.sessions import SessionStore
+from app.auth.sessions import Session, SessionStore
 from app.auth.webauthn import LoginChallengeStore, RegistrationChallengeStore
 from app.config import Config
 from app.db.session import create_engine_from_config, create_session_factory
@@ -25,6 +25,18 @@ def get_registration_store(request: Request) -> RegistrationChallengeStore:
 
 def get_login_store(request: Request) -> LoginChallengeStore:
     return request.app.state.login_store
+
+
+def get_owner_session(request: Request) -> Session | None:
+    return getattr(request.state, "owner_session", None)
+
+
+def require_owner_session(
+    owner_session: Session | None = Depends(get_owner_session),
+) -> Session:
+    if owner_session is None:
+        raise HTTPException(status_code=401, detail="owner session required")
+    return owner_session
 
 
 def get_db(request: Request) -> Generator[Session, None, None]:
