@@ -183,3 +183,43 @@
   - Move events preserve asset IDs and update paths.
   - Delete events remove assets and derived variants.
   - Full scan recovers from missed events.
+### Task 28: Media variant profiles and derived mapping
+- Scope: variant profile definitions (thumbnail sizes, poster size, video renditions) and AssetVariant mapping
+- Acceptance criteria:
+  - Define variant profile configurations for thumbnail sizes, video poster size, and video renditions.
+  - Derived outputs are written to derived storage and recorded as AssetVariant entries with profile metadata.
+  - Unit tests cover profile selection and derived path resolution (TDD, >= 90% unit coverage for variant profile module).
+### Task 29: Metadata extraction job
+- Scope: metadata extraction job using exiftool and ffprobe
+- Acceptance criteria:
+  - Implement metadata extraction job that runs exiftool and ffprobe for assets.
+  - Persist captured_at, dimensions, duration, and location metadata for assets.
+  - Integration tests on small fixtures cover EXIF parsing, video duration, and dimensions.
+  - Unit tests cover metadata parsing (TDD, >= 90% unit coverage for metadata module).
+### Task 30: Thumbnail and poster generation
+- Scope: image thumbnails and video poster extraction
+- Acceptance criteria:
+  - Implement thumbnail job using libvips for images with multiple sizes.
+  - Extract video poster frames and store as derived variants.
+  - Generated thumbnails exist for multiple sizes and are readable.
+  - Unit tests cover thumbnail sizing and variant creation (TDD, >= 90% unit coverage for thumbnail module).
+### Task 31: Video transcode job and manifests
+- Scope: multi-quality video transcodes with streaming manifests
+- Acceptance criteria:
+  - Implement video transcode job that produces multi-quality renditions and streaming manifests (HLS or DASH).
+  - Transcode job outputs manifests and segments with expected profiles.
+  - Unit tests cover profile selection and output paths (TDD, >= 90% unit coverage for transcode module).
+  - Integration tests verify manifest and segment outputs for a small fixture.
+### Task 32: Live Photo linking and live-video variants
+- Scope: Live Photo pairing metadata and live-video variant generation
+- Acceptance criteria:
+  - Implement Live Photo linking logic to associate still and video counterparts.
+  - Generate live-video variants for paired assets and store as derived variants.
+  - Live Photo pairs link correctly and are marked for silent playback in grid.
+  - Integration tests cover Live Photo pairing and variant creation.
+### Task 33: Media job retries and failure reporting
+- Scope: retries and failure reporting for media processing jobs
+- Acceptance criteria:
+  - Add retry policies with backoff for metadata, thumbnail, and transcode jobs.
+  - Record and report failures for media jobs with actionable error context.
+  - Unit tests cover retry and failure reporting behavior (TDD, >= 90% unit coverage for media jobs module).
