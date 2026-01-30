@@ -3,6 +3,7 @@ from pathlib import Path
 
 from app.db.enums import AssetType, AssetVariantKind
 from app.media.variants import (
+    LIVE_VIDEO_PROFILE,
     THUMBNAIL_PROFILES,
     VIDEO_POSTER_PROFILE,
     VIDEO_RENDITION_PROFILES,
@@ -27,11 +28,14 @@ class VariantProfilesTest(unittest.TestCase):
             any(profile.kind == AssetVariantKind.video_transcode for profile in profiles)
         )
 
-    def test_profiles_for_live_photo_match_video_profiles(self) -> None:
-        self.assertEqual(
-            profiles_for_asset_type(AssetType.live_photo),
-            profiles_for_asset_type(AssetType.video),
+    def test_profiles_for_live_photo_include_live_video(self) -> None:
+        profiles = profiles_for_asset_type(AssetType.live_photo)
+        self.assertIn(LIVE_VIDEO_PROFILE, profiles)
+        self.assertTrue(
+            any(profile.kind == AssetVariantKind.live_video for profile in profiles)
         )
+        for profile in VIDEO_RENDITION_PROFILES:
+            self.assertIn(profile, profiles)
 
     def test_variant_output_path(self) -> None:
         derived_root = Path("/data/derived")

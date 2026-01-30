@@ -31,6 +31,12 @@ VIDEO_POSTER_PROFILE = VariantProfile(
     "poster", AssetVariantKind.thumb, "jpg", width=1280, height=720
 )
 
+LIVE_VIDEO_PROFILE = VariantProfile(
+    "live",
+    AssetVariantKind.live_video,
+    "mp4",
+)
+
 VIDEO_RENDITION_PROFILES: tuple[VariantProfile, ...] = (
     VariantProfile(
         "360p",
@@ -65,8 +71,10 @@ VIDEO_RENDITION_PROFILES: tuple[VariantProfile, ...] = (
 def profiles_for_asset_type(asset_type: AssetType) -> tuple[VariantProfile, ...]:
     if asset_type == AssetType.photo:
         return THUMBNAIL_PROFILES
-    if asset_type in {AssetType.video, AssetType.live_photo}:
+    if asset_type == AssetType.video:
         return THUMBNAIL_PROFILES + (VIDEO_POSTER_PROFILE,) + VIDEO_RENDITION_PROFILES
+    if asset_type == AssetType.live_photo:
+        return THUMBNAIL_PROFILES + (LIVE_VIDEO_PROFILE,) + VIDEO_RENDITION_PROFILES
     raise ValueError(f"Unsupported asset type: {asset_type}")
 
 

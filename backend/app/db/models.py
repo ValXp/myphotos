@@ -64,6 +64,9 @@ class PasskeyCredential(Base):
 
 class Asset(Base):
     __tablename__ = "assets"
+    __table_args__ = (
+        UniqueConstraint("live_photo_video_id", name="uq_assets_live_photo_video_id"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid_str)
     type: Mapped[AssetType] = mapped_column(
@@ -85,6 +88,10 @@ class Asset(Base):
     original_device: Mapped[int | None] = mapped_column(BigInteger)
     original_inode: Mapped[int | None] = mapped_column(BigInteger)
     original_mtime_ns: Mapped[int | None] = mapped_column(BigInteger)
+    live_photo_video_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("assets.id", ondelete="SET NULL"),
+    )
 
     variants: Mapped[list["AssetVariant"]] = relationship(
         back_populates="asset", cascade="all, delete-orphan"

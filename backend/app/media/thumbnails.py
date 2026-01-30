@@ -65,9 +65,9 @@ def compute_thumbnail_size(
 
 
 def thumbnail_profiles_for_asset(asset_type: AssetType) -> tuple[VariantProfile, ...]:
-    if asset_type == AssetType.photo:
+    if asset_type in {AssetType.photo, AssetType.live_photo}:
         return THUMBNAIL_PROFILES
-    if asset_type in {AssetType.video, AssetType.live_photo}:
+    if asset_type == AssetType.video:
         return THUMBNAIL_PROFILES + (VIDEO_POSTER_PROFILE,)
     raise ThumbnailError(f"unsupported asset type: {asset_type}")
 
@@ -91,7 +91,7 @@ def run_thumbnail_job(
     source_path = Path(asset.original_path)
     profiles = thumbnail_profiles_for_asset(asset.type)
 
-    if asset.type == AssetType.photo:
+    if asset.type in {AssetType.photo, AssetType.live_photo}:
         return _generate_thumbnails(
             session,
             source_path,
@@ -102,7 +102,7 @@ def run_thumbnail_job(
             quality=quality,
         )
 
-    if asset.type in {AssetType.video, AssetType.live_photo}:
+    if asset.type == AssetType.video:
         if not source_path.exists():
             raise ThumbnailError(f"file not found: {source_path}")
         extractor = poster_extractor or (

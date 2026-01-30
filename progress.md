@@ -41,3 +41,4 @@
 - 2026-01-30 01:06 MST - done - Add metadata extraction job and tests
 - 2026-01-30 01:17 MST - done - Add thumbnail job and tests
 - 2026-01-30 01:24 MST - done - Add video transcode job and manifests
+- 2026-01-30 01:39 MST - done - Add live photo linking and live video variants

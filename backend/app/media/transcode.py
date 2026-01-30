@@ -90,7 +90,7 @@ def run_transcode_job(
     if asset.type not in {AssetType.video, AssetType.live_photo}:
         raise TranscodeError(f"unsupported asset type: {asset.type}")
 
-    source_path = Path(asset.original_path)
+    source_path = _resolve_transcode_source(session, asset)
     if not source_path.exists():
         raise TranscodeError(f"file not found: {source_path}")
 
@@ -126,6 +126,21 @@ def run_transcode_job(
     manifest_path.write_text(build_master_manifest(profiles), encoding="ascii")
     session.flush()
     return variants
+
+
+def _resolve_transcode_source(session: Session, asset: Asset) -> Path:
+    if asset.type == AssetType.video:
+        return Path(asset.original_path)
+    if asset.type == AssetType.live_photo:
+        if not asset.live_photo_video_id:
+            raise TranscodeError("live photo video link is missing")
+        video_asset = session.get(Asset, asset.live_photo_video_id)
+        if video_asset is None:
+            raise TranscodeNotFoundError(
+                f"live photo video asset not found: {asset.live_photo_video_id}"
+            )
+        return Path(video_asset.original_path)
+    raise TranscodeError(f"unsupported asset type: {asset.type}")
 
 
 def _profile_bandwidth(profile: VariantProfile) -> int:
