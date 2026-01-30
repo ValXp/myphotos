@@ -196,6 +196,11 @@ button {
   transform: translateY(-6px);
 }
 
+.media-card.is-selected {
+  outline: 2px solid var(--accent-2);
+  box-shadow: 0 0 0 3px rgba(31, 122, 122, 0.16), var(--shadow);
+}
+
 .media-thumb,
 .album-cover {
   height: 140px;
@@ -203,6 +208,28 @@ button {
   background: linear-gradient(135deg, rgba(31, 122, 122, 0.3), rgba(215, 102, 53, 0.35));
   position: relative;
   overflow: hidden;
+}
+
+.media-select {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.9);
+  display: grid;
+  place-items: center;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+  z-index: 2;
+}
+
+.media-select input {
+  margin: 0;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-2);
+  cursor: pointer;
 }
 
 .album-cover {
@@ -284,6 +311,18 @@ button {
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
+}
+
+.selection-tools,
+.album-picker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.album-picker select {
+  min-width: 200px;
 }
 
 .album-actions {

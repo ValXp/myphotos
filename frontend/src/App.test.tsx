@@ -74,11 +74,27 @@ describe("App flows", () => {
       next_cursor: null
     };
 
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      json: async () => assetPayload
+    const albumPayload = {
+      items: [
+        {
+          id: "album-1",
+          title: "Favorites",
+          created_at: "2026-01-19T10:00:00Z",
+          updated_at: "2026-01-19T10:00:00Z",
+          item_count: 2
+        }
+      ]
+    };
+
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo) => {
+      const url = typeof input === "string" ? input : input.url;
+      const payload = url.includes("/albums") ? albumPayload : assetPayload;
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => payload
+      });
     });
     vi.stubGlobal("fetch", fetchMock);
 

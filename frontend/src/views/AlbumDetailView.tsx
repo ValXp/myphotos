@@ -53,6 +53,12 @@ type AlbumAssetsResponse = {
   items: AssetSummary[];
 };
 
+type AlbumItemsRemoveResponse = {
+  removed: string[];
+  missing: string[];
+  item_count: number;
+};
+
 function buildApiUrl(path: string): string {
   if (!API_BASE_URL) {
     return path;
@@ -170,6 +176,10 @@ export function AlbumDetailView() {
   const [items, setItems] = useState<AssetSummary[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [actionStatus, setActionStatus] = useState<"idle" | "working" | "success" | "error">("idle");
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [isRemoving, setIsRemoving] = useState(false);
 
   const loadAlbum = useCallback(async () => {
     if (!albumId) {
@@ -195,12 +205,97 @@ export function AlbumDetailView() {
     }
   }, [albumId, refreshSession]);
 
+  const toggleSelection = useCallback((assetId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(assetId)) {
+        next.delete(assetId);
+      } else {
+        next.add(assetId);
+      }
+      return next;
+    });
+    setActionStatus("idle");
+    setActionMessage(null);
+  }, []);
+
+  const handleSelectAll = useCallback(() => {
+    setSelectedIds(new Set(items.map((asset) => asset.id)));
+    setActionStatus("idle");
+    setActionMessage(null);
+  }, [items]);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+    setActionStatus("idle");
+    setActionMessage(null);
+  }, []);
+
+  const handleRemoveSelected = useCallback(async () => {
+    if (!albumId || selectedIds.size === 0) {
+      return;
+    }
+    setIsRemoving(true);
+    setActionStatus("working");
+    setActionMessage(null);
+    try {
+      const response = await requestJson<AlbumItemsRemoveResponse>(`/albums/${albumId}/items`, {
+        method: "DELETE",
+        body: JSON.stringify({ asset_ids: Array.from(selectedIds) })
+      });
+      const removedCount = response.removed.length;
+      const missingCount = response.missing.length;
+      let message = "No assets were removed.";
+      if (removedCount > 0) {
+        message = `Removed ${removedCount} asset${removedCount === 1 ? "" : "s"} from album.`;
+        if (missingCount > 0) {
+          message += ` ${missingCount} missing.`;
+        }
+      } else if (missingCount > 0) {
+        message = "Selected assets were already removed.";
+      }
+      const updatedAt = removedCount > 0 ? new Date().toISOString() : null;
+      setActionStatus("success");
+      setActionMessage(message);
+      setSelectedIds(new Set());
+      const removedSet = new Set(response.removed);
+      setItems((prev) => prev.filter((asset) => !removedSet.has(asset.id)));
+      setAlbum((prev) =>
+        prev
+          ? {
+              ...prev,
+              item_count: response.item_count,
+              updated_at: updatedAt ?? prev.updated_at
+            }
+          : prev
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to remove items from album.";
+      setActionStatus("error");
+      setActionMessage(message);
+      if (err instanceof ApiError && err.status === 401) {
+        await refreshSession();
+      }
+    } finally {
+      setIsRemoving(false);
+    }
+  }, [albumId, refreshSession, selectedIds]);
+
   useEffect(() => {
     void loadAlbum();
   }, [loadAlbum]);
 
+  useEffect(() => {
+    setSelectedIds(new Set());
+    setActionStatus("idle");
+    setActionMessage(null);
+  }, [albumId]);
+
   const hasItems = items.length > 0;
   const isLoading = status === "loading";
+  const selectedCount = selectedIds.size;
+  const isActionError = actionStatus === "error";
+  const isActionSuccess = actionStatus === "success";
 
   return (
     <section className="page">
@@ -219,9 +314,33 @@ export function AlbumDetailView() {
           <div className="pill-group">
             <span className="pill">{formatItemCount(album?.item_count ?? 0)}</span>
             {album && <span className="pill">{formatAlbumUpdated(album)}</span>}
+            <span className="pill">{selectedCount} selected</span>
+          </div>
+          <div className="selection-tools">
+            <button className="ghost" onClick={handleSelectAll} disabled={!hasItems}>
+              Select all
+            </button>
+            <button className="ghost" onClick={handleClearSelection} disabled={selectedCount === 0}>
+              Clear
+            </button>
+            <button
+              className="primary"
+              onClick={handleRemoveSelected}
+              disabled={selectedCount === 0 || isRemoving}
+            >
+              Remove selected
+            </button>
           </div>
         </div>
       </header>
+      {actionMessage && (
+        <div
+          className={`status${isActionError ? " error" : ""}${isActionSuccess ? " success" : ""}`}
+          role={isActionError ? "alert" : "status"}
+        >
+          {actionMessage}
+        </div>
+      )}
       {error && (
         <div className="status error" role="alert">
           {error}
@@ -249,14 +368,23 @@ export function AlbumDetailView() {
             );
             const typeLabel = formatTypeLabel(asset.type);
             const thumbAlt = `${typeLabel} thumbnail from ${dateLabel}`;
+            const isSelected = selectedIds.has(asset.id);
 
             return (
               <article
                 key={asset.id}
-                className="media-card album-media-card"
+                className={`media-card album-media-card${isSelected ? " is-selected" : ""}`}
                 style={{ "--delay": `${index * 0.03}s` } as CSSProperties}
               >
                 <div className="media-thumb">
+                  <label className="media-select">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleSelection(asset.id)}
+                      aria-label={isSelected ? "Deselect asset" : "Select asset"}
+                    />
+                  </label>
                   <img src={thumbnailUrl(asset.id)} alt={thumbAlt} loading="lazy" />
                   <span className="media-badge">{typeLabel}</span>
                   {durationLabel && <span className="media-duration">{durationLabel}</span>}
