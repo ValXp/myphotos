@@ -69,3 +69,34 @@
   - Append new tasks derived from that plan to tasks.md after the last existing task; continue task numbering without gaps.
   - Each appended task follows the tasks.md format (Task N, Scope, Acceptance criteria) and keeps 1-2 focused changes.
   - Include any test or build commands explicitly specified in the plan verbatim in appended task acceptance criteria.
+### Task 10: Backend project skeleton and tooling
+- Scope: backend project layout (app, tests, migrations, workers), typed tooling config (mypy/pyright + ruff)
+- Acceptance criteria:
+  - Create the backend directory structure for app, tests, migrations, and workers per plan 01.
+  - Add typed Python tooling configuration for mypy/pyright and ruff.
+### Task 11: Config loader and storage layout
+- Scope: config loader with defaults for paths, DB, Redis, app settings; storage layout resolution (originals, derived, temp)
+- Acceptance criteria:
+  - Implement config parsing and validation with default values for paths, DB, Redis, and app settings.
+  - Resolve storage layout paths for originals, derived, and temp using the config loader.
+  - Print the effective config at startup in the backend entrypoint.
+  - Unit tests cover config parsing and validation (TDD, >= 90% unit coverage for config module).
+### Task 12: ORM models and migrations for core entities
+- Scope: ORM models and Alembic migrations for users, passkeys, assets, variants, albums, shares, jobs, zips
+- Acceptance criteria:
+  - Define ORM models for core entities listed in plan 01.
+  - Add Alembic migrations that create all required tables for those entities.
+  - Migration test: `migrate up` creates all required tables.
+### Task 13: Redis connection and queue wrapper
+- Scope: Redis connection, queue abstraction, test job
+- Acceptance criteria:
+  - Add Redis connection wiring and a queue wrapper that can enqueue/dequeue jobs.
+  - Implement a no-op test job handled by the queue wrapper.
+  - Queue smoke test enqueues and processes a no-op job.
+  - Unit tests cover queue wrapper behavior (TDD, >= 90% unit coverage for queue module).
+### Task 14: Health endpoint and DI wiring
+- Scope: `/health` endpoint and basic dependency injection wiring
+- Acceptance criteria:
+  - Add `/health` endpoint to the API shell and return the expected payload.
+  - Implement basic dependency injection wiring needed for the health route.
+  - `/health` returns 200 with expected payload.
