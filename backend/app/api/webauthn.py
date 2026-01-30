@@ -53,6 +53,12 @@ class RegistrationVerifyRequest(BaseModel):
     user_handle: str = Field(min_length=1)
 
 
+class LoginVerifyRequest(BaseModel):
+    credential_id: str = Field(min_length=1)
+    challenge: str = Field(min_length=1)
+    sign_count: int = Field(default=0, ge=0)
+
+
 @router.post("/register/options")
 def registration_options(
     response: Response,
@@ -152,6 +158,50 @@ def login_options(
     }
 
 
+@router.post("/login/verify")
+def login_verify(
+    response: Response,
+    request: Request,
+    payload: LoginVerifyRequest,
+    config: Config = Depends(get_config),
+    store: LoginChallengeStore = Depends(get_login_store),
+    session_store: SessionStore = Depends(get_session_store),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    session_id = request.cookies.get(DEFAULT_LOGIN_SESSION_COOKIE_NAME)
+    if session_id is None:
+        raise HTTPException(status_code=400, detail="login session cookie missing")
+
+    challenge = store.consume(session_id)
+    if challenge is None:
+        raise HTTPException(status_code=400, detail="login challenge missing or expired")
+    if payload.challenge != challenge.challenge:
+        raise HTTPException(status_code=400, detail="login challenge mismatch")
+
+    try:
+        credential_id = _base64url_decode(payload.credential_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    credential = db.execute(
+        select(PasskeyCredential).where(PasskeyCredential.credential_id == credential_id)
+    ).scalar_one_or_none()
+    if credential is None:
+        raise HTTPException(status_code=404, detail="credential not registered")
+    if credential.user_id != challenge.user_id:
+        raise HTTPException(status_code=403, detail="credential user mismatch")
+    if payload.sign_count < credential.sign_count:
+        raise HTTPException(status_code=400, detail="sign count regressed")
+
+    credential.sign_count = payload.sign_count
+    db.commit()
+
+    session = session_store.create(credential.user_id)
+    _set_session_cookie(response, session.id, config)
+
+    return {"status": "ok", "user_id": credential.user_id}
+
+
 @router.post("/register/verify")
 def registration_verify(
     request: Request,
@@ -239,6 +289,18 @@ def _set_login_cookie(response: Response, session_id: str, config: Config) -> No
         key=DEFAULT_LOGIN_SESSION_COOKIE_NAME,
         value=session_id,
         max_age=DEFAULT_LOGIN_CHALLENGE_TTL_SECONDS,
+        httponly=True,
+        samesite="lax",
+        secure=secure_cookie,
+    )
+
+
+def _set_session_cookie(response: Response, session_id: str, config: Config) -> None:
+    secure_cookie = config.app.env.lower() == "production"
+    response.set_cookie(
+        key=config.session.cookie_name,
+        value=session_id,
+        max_age=config.session.ttl_seconds,
         httponly=True,
         samesite="lax",
         secure=secure_cookie,
