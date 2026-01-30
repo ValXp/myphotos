@@ -1,0 +1,6 @@
+{
+  "include": ["app", "tests", "workers"],
+  "typeCheckingMode": "standard",
+  "pythonVersion": "3.13",
+  "reportMissingTypeStubs": false
+}
