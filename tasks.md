@@ -335,3 +335,23 @@
 - Acceptance criteria:
   - Add date range and location filters to the timeline UI.
   - Filters update timeline results correctly.
+### Task 54: Public routing and layout
+- Scope: public album routing and layout separate from owner app
+- Acceptance criteria:
+  - Add public routes and layout that are distinct from the owner app shell.
+  - Public album routes load without authentication.
+### Task 55: Public album grid
+- Scope: public album grid using share token APIs
+- Acceptance criteria:
+  - Implement public album grid view wired to share token APIs.
+  - Public album grid exposes only assets from the shared album.
+### Task 56: Public viewer playback
+- Scope: reuse viewer for public playback context
+- Acceptance criteria:
+  - Reuse the viewer for the public album context.
+  - Public viewer supports video playback and Live Photos.
+### Task 57: Public ZIP download flow
+- Scope: ZIP download initiation, status, and error handling
+- Acceptance criteria:
+  - Add ZIP download initiation and status UI for public albums.
+  - ZIP download starts and completes from the public view, with error handling.
