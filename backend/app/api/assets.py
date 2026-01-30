@@ -14,15 +14,22 @@ from sqlalchemy.orm import Session, selectinload
 from app.api.deps import get_config, get_db, require_owner_session
 from app.auth.sessions import Session as OwnerSession
 from app.config import Config
-from app.db.enums import AssetVariantKind
+from app.db.enums import AssetType, AssetVariantKind
 from app.db.models import Asset, AssetVariant
+from app.media.transcode import master_manifest_path
 
 
 DEFAULT_PAGE_SIZE = 100
 MAX_PAGE_SIZE = 200
 THUMB_CACHE_CONTROL = "public, max-age=31536000, immutable"
 ORIGINAL_CACHE_CONTROL = "private, max-age=86400"
+STREAM_CACHE_CONTROL = "private, max-age=60"
+LIVE_CACHE_CONTROL = "private, max-age=60"
 RANGE_CHUNK_SIZE = 1024 * 1024
+STREAM_MEDIA_TYPES = {
+    ".m3u8": "application/vnd.apple.mpegurl",
+    ".ts": "video/MP2T",
+}
 
 router = APIRouter()
 
@@ -170,6 +177,65 @@ def get_asset_original(
     )
 
 
+@router.get("/assets/{asset_id}/stream")
+def get_asset_stream(
+    asset_id: str,
+    request: Request,
+    file: str | None = None,
+    db: Session = Depends(get_db),
+    config: Config = Depends(get_config),
+    _: OwnerSession = Depends(require_owner_session),
+) -> Response:
+    asset = db.query(Asset).filter(Asset.id == asset_id).one_or_none()
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    if asset.type not in {AssetType.video, AssetType.live_photo}:
+        raise HTTPException(status_code=404, detail="stream not found")
+    stream_path = _resolve_stream_path(asset_id, config.paths.derived, file)
+    media_type = _stream_media_type(stream_path)
+    return _build_file_response(
+        stream_path,
+        request,
+        media_type=media_type,
+        cache_control=STREAM_CACHE_CONTROL,
+        enable_range=True,
+        missing_detail="stream not found",
+    )
+
+
+@router.get("/assets/{asset_id}/live")
+def get_asset_live_video(
+    asset_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    config: Config = Depends(get_config),
+    _: OwnerSession = Depends(require_owner_session),
+) -> Response:
+    asset = (
+        db.query(Asset)
+        .options(selectinload(Asset.variants))
+        .filter(Asset.id == asset_id)
+        .one_or_none()
+    )
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    if asset.type != AssetType.live_photo:
+        raise HTTPException(status_code=404, detail="live video not found")
+    variant = _select_live_video_variant(asset.variants)
+    if variant is None:
+        raise HTTPException(status_code=404, detail="live video not found")
+    path = _resolve_variant_path(variant.path, config.paths.derived)
+    media_type = _guess_media_type(path, default="video/mp4")
+    return _build_file_response(
+        path,
+        request,
+        media_type=media_type,
+        cache_control=LIVE_CACHE_CONTROL,
+        enable_range=True,
+        missing_detail="live video not found",
+    )
+
+
 def _serialize_asset_summary(asset: Asset) -> dict[str, object]:
     return {
         "id": asset.id,
@@ -280,6 +346,31 @@ def _select_thumbnail_variant(
             if variant.profile == name:
                 return variant
     return thumb_variants[0]
+
+
+def _select_live_video_variant(variants: list[AssetVariant]) -> AssetVariant | None:
+    for variant in variants:
+        if variant.kind == AssetVariantKind.live_video:
+            return variant
+    return None
+
+
+def _resolve_stream_path(asset_id: str, derived_root: Path, filename: str | None) -> Path:
+    if filename is None or not filename.strip():
+        return master_manifest_path(derived_root, asset_id)
+    normalized = filename.strip()
+    if "/" in normalized or "\\" in normalized:
+        raise HTTPException(status_code=400, detail="invalid stream file")
+    if normalized.startswith(".") or ".." in normalized:
+        raise HTTPException(status_code=400, detail="invalid stream file")
+    path = derived_root / asset_id / AssetVariantKind.video_transcode.value / normalized
+    if path.suffix.lower() not in STREAM_MEDIA_TYPES:
+        raise HTTPException(status_code=400, detail="unsupported stream file")
+    return path
+
+
+def _stream_media_type(path: Path) -> str:
+    return STREAM_MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream")
 
 
 def _resolve_variant_path(path: str, derived_root: Path) -> Path:
