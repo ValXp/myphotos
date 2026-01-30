@@ -3,10 +3,12 @@ from __future__ import annotations
 import logging
 import time
 from ipaddress import ip_address, ip_network
+from pathlib import Path
 from typing import Awaitable, Callable
 from uuid import uuid4
 
 from fastapi import FastAPI, Request, Response
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.auth.sessions import SessionError, SessionStore, create_session_store
@@ -31,6 +33,19 @@ from app.observability import REQUEST_ID_HEADER, configure_logging, request_cont
 from app.queue import Queue, RedisQueueBackend, create_redis_client
 
 logger = logging.getLogger("app.api")
+API_PREFIXES = (
+    "/admin",
+    "/albums",
+    "/assets",
+    "/auth",
+    "/docs",
+    "/health",
+    "/public",
+    "/ready",
+    "/redoc",
+    "/webauthn",
+)
+API_EXACT_PATHS = ("/openapi.json",)
 
 
 def _metric_path(request: Request) -> str:
@@ -98,6 +113,61 @@ def _replace_host_header(
     return updated
 
 
+def _is_api_path(path: str) -> bool:
+    if path in API_EXACT_PATHS:
+        return True
+    for prefix in API_PREFIXES:
+        if path == prefix or path.startswith(f"{prefix}/"):
+            return True
+    return False
+
+
+def _safe_frontend_path(root: Path, relative: str) -> Path | None:
+    try:
+        resolved = (root / relative).resolve(strict=False)
+    except (RuntimeError, OSError):
+        return None
+    try:
+        resolved.relative_to(root)
+    except ValueError:
+        return None
+    return resolved
+
+
+def _should_spa_fallback(path: str) -> bool:
+    if path.endswith("/"):
+        return True
+    return Path(path).suffix == ""
+
+
+def _frontend_response(
+    request_path: str,
+    *,
+    dist_root: Path,
+    index_path: Path | None,
+) -> FileResponse | None:
+    relative = request_path.lstrip("/")
+    if relative:
+        candidate = _safe_frontend_path(dist_root, relative)
+        if candidate is not None:
+            if candidate.is_file():
+                return FileResponse(candidate)
+            if candidate.is_dir():
+                dir_index = candidate / "index.html"
+                if dir_index.is_file():
+                    return FileResponse(dir_index)
+    else:
+        if index_path is not None and index_path.is_file():
+            return FileResponse(index_path)
+    if index_path is None:
+        return None
+    if _is_api_path(request_path):
+        return None
+    if _should_spa_fallback(request_path):
+        return FileResponse(index_path)
+    return None
+
+
 def create_app(
     config: Config | None = None,
     *,
@@ -117,6 +187,15 @@ def create_app(
     app.state.login_store = login_store or create_login_store(resolved)
     app.state.queue = queue or Queue(RedisQueueBackend(create_redis_client(resolved.redis)))
     app.state.scan_backoff = scan_backoff or ScanBackoffPolicy()
+    frontend_dist = None
+    frontend_index = None
+    if resolved.app.frontend_dist_dir is not None:
+        candidate = resolved.app.frontend_dist_dir
+        if candidate.is_dir():
+            frontend_dist = candidate.resolve(strict=False)
+            index_path = frontend_dist / "index.html"
+            if index_path.is_file():
+                frontend_index = index_path
     if db_session_factory is None:
         app.state.db_engine = None
         app.state.db_session_factory = None
@@ -170,7 +249,15 @@ def create_app(
         metric_path = _metric_path(request)
         with request_context(request_id):
             try:
-                response = await call_next(request)
+                response = None
+                if frontend_dist is not None and request.method in ("GET", "HEAD"):
+                    response = _frontend_response(
+                        request.url.path,
+                        dist_root=frontend_dist,
+                        index_path=frontend_index,
+                    )
+                if response is None:
+                    response = await call_next(request)
             except Exception:
                 duration_ms = int((time.perf_counter() - start) * 1000)
                 record_request(request.method, metric_path, None)

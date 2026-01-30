@@ -50,6 +50,7 @@ class AppConfig:
     port: int
     log_level: str
     trusted_proxy_ips: tuple[str, ...]
+    frontend_dist_dir: Path | None
 
 
 @dataclass(frozen=True)
@@ -88,6 +89,11 @@ class Config:
                 "port": self.app.port,
                 "log_level": self.app.log_level,
                 "trusted_proxy_ips": list(self.app.trusted_proxy_ips),
+                "frontend_dist_dir": (
+                    str(self.app.frontend_dist_dir)
+                    if self.app.frontend_dist_dir is not None
+                    else None
+                ),
             },
             "session": {
                 "ttl_seconds": self.session.ttl_seconds,
@@ -123,6 +129,7 @@ def load_config(environ: Mapping[str, str] | None = None) -> Config:
         trusted_proxy_ips=tuple(
             _csv_from_env(env, "TRUSTED_PROXY_IPS", DEFAULT_TRUSTED_PROXY_IPS)
         ),
+        frontend_dist_dir=_optional_path_from_env(env, "FRONTEND_DIST_DIR"),
     )
     default_origin = f"http://{app.host}:{app.port}"
     webauthn = WebAuthnConfig(
@@ -197,6 +204,15 @@ def _path_from_env(
     if base is not None and not path.is_absolute():
         path = base / path
     return _normalize_path(path)
+
+
+def _optional_path_from_env(env: Mapping[str, str], key: str) -> Path | None:
+    raw = env.get(key)
+    if raw is None:
+        return None
+    if not raw.strip():
+        raise ConfigError(f"{key} must not be empty")
+    return _normalize_path(Path(raw))
 
 
 def _normalize_path(value: str | Path) -> Path:

@@ -85,3 +85,5 @@
 - 2026-01-30 08:59 MST - done - Add indexer runner and tests
 
 - 2026-01-30 09:06 MST - done - Add trusted proxy header support
+
+- 2026-01-30 09:14 MST - done - Serve frontend dist with SPA fallback

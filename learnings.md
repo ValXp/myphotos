@@ -57,3 +57,5 @@
 - 2026-01-30 08:29 MST: Normalized postgres URLs without an explicit driver to use psycopg, avoiding a psycopg2 dependency.
 
 - 2026-01-30 09:06 MST: Starlette URL uses the Host header ahead of scope server; honoring X-Forwarded-Host requires updating scope headers (TestClient client host is "testclient").
+
+- 2026-01-30 09:14 MST: Frontend dist assets use /assets; serve static files before routing to avoid API path conflicts and fallback to index for SPA routes.
