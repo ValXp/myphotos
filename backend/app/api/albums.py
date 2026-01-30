@@ -3,13 +3,22 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import secrets
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, require_owner_session
+from app.api.deps import get_config, get_db, require_owner_session
 from app.auth.sessions import Session as OwnerSession
+from app.config import Config
 from app.db.models import Album, AlbumItem, Asset, ShareLink
+from app.downloads.zip_jobs import (
+    ZipFailedError,
+    ZipInProgressError,
+    album_zip_record,
+    latest_zip_job,
+    start_album_zip_job,
+    zip_status_payload,
+)
 
 router = APIRouter(prefix="/albums")
 
@@ -196,6 +205,41 @@ def revoke_share_link(
     db.commit()
     db.refresh(share)
     return _serialize_share_link(share)
+
+
+@router.post("/{album_id}/zip")
+def create_album_zip_job(
+    album_id: str,
+    response: Response,
+    db: Session = Depends(get_db),
+    config: Config = Depends(get_config),
+    _: OwnerSession = Depends(require_owner_session),
+) -> dict[str, object]:
+    album = db.query(Album).filter(Album.id == album_id).one_or_none()
+    if album is None:
+        raise HTTPException(status_code=404, detail="album not found")
+    try:
+        job = start_album_zip_job(db, album_id, config)
+    except ZipInProgressError as exc:
+        response.status_code = 409
+        return zip_status_payload(exc.job, album_zip_record(db, album_id), album_id)
+    except ZipFailedError as exc:
+        response.status_code = 500
+        return zip_status_payload(exc.job, album_zip_record(db, album_id), album_id)
+    return zip_status_payload(job, album_zip_record(db, album_id), album_id)
+
+
+@router.get("/{album_id}/zip")
+def get_album_zip_status(
+    album_id: str,
+    db: Session = Depends(get_db),
+    _: OwnerSession = Depends(require_owner_session),
+) -> dict[str, object]:
+    album = db.query(Album).filter(Album.id == album_id).one_or_none()
+    if album is None:
+        raise HTTPException(status_code=404, detail="album not found")
+    job = latest_zip_job(db, album_id)
+    return zip_status_payload(job, album_zip_record(db, album_id), album_id)
 
 
 def _serialize_album(album: Album, item_count: int) -> dict[str, object]:
