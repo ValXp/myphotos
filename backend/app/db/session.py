@@ -8,7 +8,7 @@ from app.config import Config
 
 
 def create_engine_from_config(config: Config) -> Engine:
-    url = config.database.url
+    url = _normalize_database_url(config.database.url)
     connect_args: dict[str, object] = {}
     if url.startswith("sqlite"):
         connect_args["check_same_thread"] = False
@@ -17,3 +17,11 @@ def create_engine_from_config(config: Config) -> Engine:
 
 def create_session_factory(engine: Engine) -> sessionmaker[Session]:
     return sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+
+
+def _normalize_database_url(url: str) -> str:
+    if url.startswith("postgresql://"):
+        return f"postgresql+psycopg://{url[len('postgresql://'):]}"
+    if url.startswith("postgres://"):
+        return f"postgresql+psycopg://{url[len('postgres://'):]}"
+    return url

@@ -53,3 +53,5 @@
 - 2026-01-30 05:38 MST: Backend tests warn about unclosed sqlite connections during share link tests; keep an eye on ResourceWarning output.
 - 2026-01-30 05:38 MST: CI coverage uses backend/.coveragerc to focus unit coverage gating on non-API, non-external-tool modules.
 - 2026-01-30 05:50 MST: Integration tests are gated by INTEGRATION_TESTS=1 and require INTEGRATION_DB_URL/INTEGRATION_REDIS_URL with psycopg for Postgres connectivity.
+- 2026-01-30 08:29 MST: Integration tests require running Redis/Postgres services; installed and started redis-server and postgresql locally.
+- 2026-01-30 08:29 MST: Normalized postgres URLs without an explicit driver to use psycopg, avoiding a psycopg2 dependency.
