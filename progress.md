@@ -23,3 +23,4 @@
 - 2026-01-29 23:12 MST - done - Add Redis queue wrapper and tests
 - 2026-01-29 23:17 MST - done - Add health endpoint and DI wiring
 - 2026-01-29 23:25 MST - done - Add WebAuthn config and session storage
+- 2026-01-29 23:32 MST - done - Add WebAuthn registration options endpoint
