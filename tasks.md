@@ -139,3 +139,47 @@
   - Add auth middleware that validates the owner session for protected routes.
   - Owner-only routes reject unauthenticated requests.
   - Public share routes remain unauthenticated.
+### Task 21: File type registry and Live Photo pairing
+- Scope: file type detection registry, Live Photo pairing rules
+- Acceptance criteria:
+  - Define supported file extensions for images and videos in a file type registry.
+  - Implement Live Photo pairing rules for still/video counterparts.
+  - Unit tests cover file type detection and pairing rules (TDD, >= 90% unit coverage for file type registry module).
+### Task 22: Full scan job for watched folders
+- Scope: full scan job that walks watched folders and upserts assets
+- Acceptance criteria:
+  - Implement a full scan job that walks watched folders and upserts assets into the database.
+  - Full scan detects new and changed assets using the file type registry.
+  - Unit tests cover full scan job behavior (TDD, >= 90% unit coverage for scan module).
+### Task 23: Filesystem watcher for add/move/delete
+- Scope: filesystem watcher that emits add/move/delete events
+- Acceptance criteria:
+  - Implement a watcher that emits add, move, and delete events for watched folders.
+  - Watcher filters events to supported file types and Live Photo pairs.
+  - Unit tests cover watcher event emission and filtering (TDD, >= 90% unit coverage for watcher module).
+### Task 24: Move/delete reconciliation logic
+- Scope: move/delete reconciliation that preserves asset identity
+- Acceptance criteria:
+  - Implement reconciliation logic that preserves asset identity for moves using inode + size + timestamp, with hash fallback.
+  - Move events update asset paths without changing asset IDs.
+  - Delete events remove assets and derived variants for removed files.
+  - Unit tests cover reconciliation behavior for move and delete cases (TDD, >= 90% unit coverage for reconciliation module).
+### Task 25: Enqueue downstream processing jobs
+- Scope: enqueue metadata, thumbnail, and transcode jobs for new/changed assets
+- Acceptance criteria:
+  - Enqueue metadata, thumbnail, and transcode jobs for new or changed assets after scans or watcher events.
+  - Jobs are not enqueued for unchanged assets.
+  - Unit tests cover job enqueue decisions (TDD, >= 90% unit coverage for ingest job module).
+### Task 26: Admin scan endpoints with backoff
+- Scope: admin endpoints to start scans and check status, backoff handling
+- Acceptance criteria:
+  - Add admin endpoints to start a scan and return scan status.
+  - Implement backoff handling for large scans.
+  - Integration tests cover scan start and status endpoints.
+### Task 27: Integration tests for ingest flows
+- Scope: integration tests for add/move/delete and full scan recovery
+- Acceptance criteria:
+  - Integration test with a fixture folder covers add, move, and delete flows.
+  - Move events preserve asset IDs and update paths.
+  - Delete events remove assets and derived variants.
+  - Full scan recovers from missed events.
