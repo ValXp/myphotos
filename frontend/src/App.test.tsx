@@ -49,6 +49,55 @@ describe("App flows", () => {
   it("renders public album routes without authentication", async () => {
     mockedSessionStatus.mockResolvedValue(false);
 
+    const albumPayload = {
+      id: "album-public-1",
+      title: "Weekend share",
+      created_at: "2026-01-12T08:00:00Z",
+      updated_at: "2026-01-18T08:00:00Z"
+    };
+
+    const assetsPayload = {
+      items: [
+        {
+          id: "asset-public-1",
+          type: "photo",
+          captured_at: "2026-01-20T16:30:00Z",
+          created_at: "2026-01-20T16:30:00Z",
+          duration_ms: null,
+          width: 4032,
+          height: 3024,
+          live_photo_video_id: null
+        }
+      ]
+    };
+
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.includes("/public/shares/demo-token/album")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => albumPayload
+        });
+      }
+      if (url.includes("/public/shares/demo-token/assets")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => assetsPayload
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({})
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
     render(
       <MemoryRouter initialEntries={["/share/demo-token"]}>
         <App />
@@ -56,7 +105,11 @@ describe("App flows", () => {
     );
 
     expect(await screen.findByText(/public share/i)).toBeInTheDocument();
+    expect(screen.getByText(/weekend share/i)).toBeInTheDocument();
     expect(screen.getByText(/demo-token/i)).toBeInTheDocument();
+    expect(
+      await screen.findByRole("img", { name: "Photo thumbnail from Jan 20, 2026" })
+    ).toHaveAttribute("src", expect.stringContaining("/public/shares/demo-token/assets"));
     expect(screen.queryByText(/unlock your library/i)).not.toBeInTheDocument();
   });
 

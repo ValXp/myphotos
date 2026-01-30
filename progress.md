@@ -69,3 +69,4 @@
 - 2026-01-30 04:23 MST - done - Add timeline date and location filters
 
 - 2026-01-30 04:28 MST - done - Add public share routing and layout
+- 2026-01-30 04:38 MST - done - Add public album grid view

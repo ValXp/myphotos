@@ -2,10 +2,17 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import FileResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
+from app.api.assets import (
+    THUMB_CACHE_CONTROL,
+    _build_file_response,
+    _guess_media_type,
+    _resolve_variant_path,
+    _select_thumbnail_variant,
+)
 from app.api.deps import get_config, get_db, require_share_link
 from app.config import Config
 from app.db.models import AlbumItem, Asset, ShareLink
@@ -42,6 +49,39 @@ def list_public_album_assets(
     )
     items = [_serialize_asset_summary(asset) for _, asset in rows]
     return {"items": items}
+
+
+@router.get("/{token}/assets/{asset_id}/thumb")
+def get_public_asset_thumbnail(
+    asset_id: str,
+    request: Request,
+    profile: str | None = None,
+    share: ShareLink = Depends(require_share_link),
+    db: Session = Depends(get_db),
+    config: Config = Depends(get_config),
+) -> Response:
+    asset = (
+        db.query(Asset)
+        .options(selectinload(Asset.variants))
+        .join(AlbumItem, AlbumItem.asset_id == Asset.id)
+        .filter(AlbumItem.album_id == share.album_id, Asset.id == asset_id)
+        .one_or_none()
+    )
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    variant = _select_thumbnail_variant(asset.variants, profile)
+    if variant is None:
+        raise HTTPException(status_code=404, detail="thumbnail not found")
+    path = _resolve_variant_path(variant.path, config.paths.derived)
+    media_type = _guess_media_type(path, default="image/jpeg")
+    return _build_file_response(
+        path,
+        request,
+        media_type=media_type,
+        cache_control=THUMB_CACHE_CONTROL,
+        enable_range=False,
+        missing_detail="thumbnail not found",
+    )
 
 
 @router.get("/{token}/zip/download")
