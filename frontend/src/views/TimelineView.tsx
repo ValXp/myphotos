@@ -1,6 +1,7 @@
 import type { ChangeEvent, CSSProperties } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { useLivePhotoHover } from "../hooks/useLivePhotoHover";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 const PAGE_SIZE = 60;
@@ -159,6 +160,10 @@ function thumbnailUrl(assetId: string): string {
   return buildApiUrl(`/assets/${assetId}/thumb?profile=${THUMB_PROFILE}`);
 }
 
+function liveVideoUrl(assetId: string): string {
+  return buildApiUrl(`/assets/${assetId}/live`);
+}
+
 async function fetchAssets(cursor: string | null): Promise<AssetsResponse> {
   const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
   if (cursor) {
@@ -185,6 +190,7 @@ export function TimelineView() {
   const [isAdding, setIsAdding] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const inFlightRef = useRef(false);
+  const { registerVideoRef, handleMouseEnter, handleMouseLeave } = useLivePhotoHover();
 
   const loadAssets = useCallback(
     async (cursor: string | null, mode: "initial" | "more") => {
@@ -478,6 +484,8 @@ export function TimelineView() {
             const typeLabel = formatTypeLabel(asset.type);
             const thumbAlt = `${typeLabel} thumbnail from ${dateLabel}`;
             const isSelected = selectedIds.has(asset.id);
+            const isLivePhoto = asset.type === "live_photo" && !!asset.live_photo_video_id;
+            const livePreviewSrc = isLivePhoto ? liveVideoUrl(asset.id) : null;
 
             return (
               <article
@@ -485,7 +493,11 @@ export function TimelineView() {
                 className={`media-card timeline-card${isSelected ? " is-selected" : ""}`}
                 style={{ "--delay": `${index * 0.04}s` } as CSSProperties}
               >
-                <div className="media-thumb">
+                <div
+                  className={`media-thumb${isLivePhoto ? " live-photo-thumb" : ""}`}
+                  onMouseEnter={isLivePhoto ? () => handleMouseEnter(asset.id) : undefined}
+                  onMouseLeave={isLivePhoto ? () => handleMouseLeave(asset.id) : undefined}
+                >
                   <label className="media-select">
                     <input
                       type="checkbox"
@@ -494,7 +506,27 @@ export function TimelineView() {
                       aria-label={isSelected ? "Deselect asset" : "Select asset"}
                     />
                   </label>
-                  <img src={thumbnailUrl(asset.id)} alt={thumbAlt} loading="lazy" />
+                  <img
+                    className={isLivePhoto ? "live-photo-still" : undefined}
+                    src={thumbnailUrl(asset.id)}
+                    alt={thumbAlt}
+                    loading="lazy"
+                  />
+                  {isLivePhoto && (
+                    <video
+                      ref={registerVideoRef(asset.id)}
+                      className="live-photo-video"
+                      muted
+                      playsInline
+                      preload="metadata"
+                      loop
+                      src={livePreviewSrc ?? undefined}
+                      aria-hidden="true"
+                      onError={(event) => {
+                        event.currentTarget.dataset.failed = "true";
+                      }}
+                    />
+                  )}
                   <span className="media-badge">{typeLabel}</span>
                   {durationLabel && <span className="media-duration">{durationLabel}</span>}
                 </div>

@@ -69,6 +69,16 @@ describe("App flows", () => {
           width: 1920,
           height: 1080,
           live_photo_video_id: null
+        },
+        {
+          id: "asset-3",
+          type: "live_photo",
+          captured_at: "2026-01-14T14:15:00Z",
+          created_at: "2026-01-14T14:15:00Z",
+          duration_ms: null,
+          width: 3024,
+          height: 4032,
+          live_photo_video_id: "asset-3-video"
         }
       ],
       next_cursor: null
@@ -98,7 +108,7 @@ describe("App flows", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(
+    const { container } = render(
       <MemoryRouter initialEntries={["/app/timeline"]}>
         <App />
       </MemoryRouter>
@@ -106,8 +116,10 @@ describe("App flows", () => {
 
     expect(await screen.findByText("Jan 20, 2026")).toBeInTheDocument();
     expect(screen.getByText("Photo")).toBeInTheDocument();
+    expect(screen.getByText("Live Photo")).toBeInTheDocument();
     expect(
       screen.getByRole("img", { name: "Photo thumbnail from Jan 20, 2026" })
     ).toHaveAttribute("src", expect.stringContaining("/assets/asset-1/thumb"));
+    expect(container.querySelector("video.live-photo-video")).toBeInTheDocument();
   });
 });

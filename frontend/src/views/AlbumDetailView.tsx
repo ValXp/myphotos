@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { useLivePhotoHover } from "../hooks/useLivePhotoHover";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 const THUMB_PROFILE = "thumb_md";
@@ -169,6 +170,10 @@ function thumbnailUrl(assetId: string): string {
   return buildApiUrl(`/assets/${assetId}/thumb?profile=${THUMB_PROFILE}`);
 }
 
+function liveVideoUrl(assetId: string): string {
+  return buildApiUrl(`/assets/${assetId}/live`);
+}
+
 export function AlbumDetailView() {
   const { albumId } = useParams();
   const { refreshSession } = useAuth();
@@ -180,6 +185,7 @@ export function AlbumDetailView() {
   const [actionStatus, setActionStatus] = useState<"idle" | "working" | "success" | "error">("idle");
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [isRemoving, setIsRemoving] = useState(false);
+  const { registerVideoRef, handleMouseEnter, handleMouseLeave } = useLivePhotoHover();
 
   const loadAlbum = useCallback(async () => {
     if (!albumId) {
@@ -369,6 +375,8 @@ export function AlbumDetailView() {
             const typeLabel = formatTypeLabel(asset.type);
             const thumbAlt = `${typeLabel} thumbnail from ${dateLabel}`;
             const isSelected = selectedIds.has(asset.id);
+            const isLivePhoto = asset.type === "live_photo" && !!asset.live_photo_video_id;
+            const livePreviewSrc = isLivePhoto ? liveVideoUrl(asset.id) : null;
 
             return (
               <article
@@ -376,7 +384,11 @@ export function AlbumDetailView() {
                 className={`media-card album-media-card${isSelected ? " is-selected" : ""}`}
                 style={{ "--delay": `${index * 0.03}s` } as CSSProperties}
               >
-                <div className="media-thumb">
+                <div
+                  className={`media-thumb${isLivePhoto ? " live-photo-thumb" : ""}`}
+                  onMouseEnter={isLivePhoto ? () => handleMouseEnter(asset.id) : undefined}
+                  onMouseLeave={isLivePhoto ? () => handleMouseLeave(asset.id) : undefined}
+                >
                   <label className="media-select">
                     <input
                       type="checkbox"
@@ -385,7 +397,27 @@ export function AlbumDetailView() {
                       aria-label={isSelected ? "Deselect asset" : "Select asset"}
                     />
                   </label>
-                  <img src={thumbnailUrl(asset.id)} alt={thumbAlt} loading="lazy" />
+                  <img
+                    className={isLivePhoto ? "live-photo-still" : undefined}
+                    src={thumbnailUrl(asset.id)}
+                    alt={thumbAlt}
+                    loading="lazy"
+                  />
+                  {isLivePhoto && (
+                    <video
+                      ref={registerVideoRef(asset.id)}
+                      className="live-photo-video"
+                      muted
+                      playsInline
+                      preload="metadata"
+                      loop
+                      src={livePreviewSrc ?? undefined}
+                      aria-hidden="true"
+                      onError={(event) => {
+                        event.currentTarget.dataset.failed = "true";
+                      }}
+                    />
+                  )}
                   <span className="media-badge">{typeLabel}</span>
                   {durationLabel && <span className="media-duration">{durationLabel}</span>}
                 </div>
