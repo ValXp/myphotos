@@ -54,3 +54,5 @@
 - 2026-01-30 02:32 MST - done - Add share links and public token enforcement
 - 2026-01-30 02:37 MST - done - Add public album asset listing
 - 2026-01-30 02:49 MST - done - Add album zip job endpoints
+
+- 2026-01-30 02:55 MST - done - Add album zip download and invalidation

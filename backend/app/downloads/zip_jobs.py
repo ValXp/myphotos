@@ -120,6 +120,29 @@ def album_zip_record(session: Session, album_id: str) -> AlbumZip | None:
     )
 
 
+def album_zip_ready(album_zip: AlbumZip | None) -> bool:
+    return album_zip is not None and album_zip.invalidated_at is None
+
+
+def album_zip_path(album_zip: AlbumZip, derived_root: Path) -> Path:
+    return _resolve_zip_path(Path(album_zip.path), derived_root)
+
+
+def invalidate_album_zip(
+    session: Session,
+    album_id: str,
+    *,
+    now_fn: Callable[[], datetime] | None = None,
+) -> AlbumZip | None:
+    record = album_zip_record(session, album_id)
+    if record is None or record.invalidated_at is not None:
+        return record
+    now = now_fn or _utcnow
+    record.invalidated_at = now()
+    session.add(record)
+    return record
+
+
 def zip_status_payload(
     job: Job | None,
     album_zip: AlbumZip | None,
@@ -269,6 +292,12 @@ def _upsert_album_zip(
 
 def _zip_status(job: Job | None, album_zip: AlbumZip | None) -> str:
     if job is not None:
+        if (
+            job.status == JobStatus.done
+            and album_zip is not None
+            and album_zip.invalidated_at is not None
+        ):
+            return "idle"
         return job.status.value
     if album_zip is not None and album_zip.invalidated_at is None:
         return JobStatus.done.value

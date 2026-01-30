@@ -1,3 +1,4 @@
+import io
 import os
 import tempfile
 import unittest
@@ -36,9 +37,10 @@ class AlbumZipIntegrationTest(unittest.TestCase):
             session_store=self.session_store,
             db_session_factory=self.session_factory,
         )
-        self.client = TestClient(self.app)
+        self.owner_client = TestClient(self.app)
+        self.public_client = TestClient(self.app)
         session = self.session_store.create("user-1")
-        self.client.cookies.set(self.config.session.cookie_name, session.id)
+        self.owner_client.cookies.set(self.config.session.cookie_name, session.id)
         self.config.paths.originals.mkdir(parents=True, exist_ok=True)
         self._write_file(self.config.paths.originals / "a.jpg", b"alpha")
         self._write_file(self.config.paths.originals / "b.jpg", b"bravo")
@@ -64,16 +66,16 @@ class AlbumZipIntegrationTest(unittest.TestCase):
             db.add_all(assets)
             db.commit()
 
-        album_response = self.client.post("/albums", json={"title": "Downloads"})
+        album_response = self.owner_client.post("/albums", json={"title": "Downloads"})
         self.assertEqual(album_response.status_code, 200)
         album_id = album_response.json()["id"]
-        add_response = self.client.post(
+        add_response = self.owner_client.post(
             f"/albums/{album_id}/items",
             json={"asset_ids": [asset.id for asset in assets]},
         )
         self.assertEqual(add_response.status_code, 200)
 
-        zip_response = self.client.post(f"/albums/{album_id}/zip")
+        zip_response = self.owner_client.post(f"/albums/{album_id}/zip")
         self.assertEqual(zip_response.status_code, 200)
         zip_body = zip_response.json()
         self.assertEqual(zip_body["status"], "done")
@@ -81,7 +83,7 @@ class AlbumZipIntegrationTest(unittest.TestCase):
         self.assertIsNotNone(zip_body.get("job_id"))
         self.assertEqual(zip_body.get("download_url"), f"/albums/{album_id}/zip/download")
 
-        status_response = self.client.get(f"/albums/{album_id}/zip")
+        status_response = self.owner_client.get(f"/albums/{album_id}/zip")
         self.assertEqual(status_response.status_code, 200)
         status_body = status_response.json()
         self.assertEqual(status_body["status"], "done")
@@ -103,15 +105,102 @@ class AlbumZipIntegrationTest(unittest.TestCase):
             self.assertEqual(archive.read("b.jpg"), b"bravo")
 
     def test_zip_status_idle_before_job(self) -> None:
-        album_response = self.client.post("/albums", json={"title": "Empty"})
+        album_response = self.owner_client.post("/albums", json={"title": "Empty"})
         self.assertEqual(album_response.status_code, 200)
         album_id = album_response.json()["id"]
 
-        status_response = self.client.get(f"/albums/{album_id}/zip")
+        status_response = self.owner_client.get(f"/albums/{album_id}/zip")
         self.assertEqual(status_response.status_code, 200)
         status_body = status_response.json()
         self.assertEqual(status_body["status"], "idle")
         self.assertIsNone(status_body.get("download_url"))
+
+    def test_zip_download_and_invalidation(self) -> None:
+        assets = [
+            Asset(
+                id="00000000-0000-0000-0000-000000000711",
+                type=AssetType.photo,
+                original_path="a.jpg",
+                original_bytes=5,
+                original_mime="image/jpeg",
+            ),
+            Asset(
+                id="00000000-0000-0000-0000-000000000712",
+                type=AssetType.photo,
+                original_path="b.jpg",
+                original_bytes=5,
+                original_mime="image/jpeg",
+            ),
+            Asset(
+                id="00000000-0000-0000-0000-000000000713",
+                type=AssetType.photo,
+                original_path="c.jpg",
+                original_bytes=7,
+                original_mime="image/jpeg",
+            ),
+        ]
+        self._write_file(self.config.paths.originals / "c.jpg", b"charlie")
+        with self.session_factory() as db:
+            db.add_all(assets)
+            db.commit()
+
+        album_response = self.owner_client.post("/albums", json={"title": "Downloads"})
+        self.assertEqual(album_response.status_code, 200)
+        album_id = album_response.json()["id"]
+        add_response = self.owner_client.post(
+            f"/albums/{album_id}/items",
+            json={"asset_ids": [assets[0].id, assets[1].id]},
+        )
+        self.assertEqual(add_response.status_code, 200)
+
+        zip_response = self.owner_client.post(f"/albums/{album_id}/zip")
+        self.assertEqual(zip_response.status_code, 200)
+
+        owner_download = self.owner_client.get(f"/albums/{album_id}/zip/download")
+        self.assertEqual(owner_download.status_code, 200)
+        with zipfile.ZipFile(io.BytesIO(owner_download.content), "r") as archive:
+            names = sorted(archive.namelist())
+            self.assertEqual(names, ["a.jpg", "b.jpg"])
+
+        share_response = self.owner_client.post(f"/albums/{album_id}/shares")
+        self.assertEqual(share_response.status_code, 200)
+        token = share_response.json()["token"]
+        public_download = self.public_client.get(
+            f"/public/shares/{token}/zip/download"
+        )
+        self.assertEqual(public_download.status_code, 200)
+        with zipfile.ZipFile(io.BytesIO(public_download.content), "r") as archive:
+            names = sorted(archive.namelist())
+            self.assertEqual(names, ["a.jpg", "b.jpg"])
+
+        add_response = self.owner_client.post(
+            f"/albums/{album_id}/items",
+            json={"asset_ids": [assets[2].id]},
+        )
+        self.assertEqual(add_response.status_code, 200)
+
+        status_response = self.owner_client.get(f"/albums/{album_id}/zip")
+        self.assertEqual(status_response.status_code, 200)
+        status_body = status_response.json()
+        self.assertEqual(status_body["status"], "idle")
+        self.assertIsNone(status_body.get("download_url"))
+
+        invalidated_download = self.owner_client.get(
+            f"/albums/{album_id}/zip/download"
+        )
+        self.assertEqual(invalidated_download.status_code, 404)
+        invalidated_public = self.public_client.get(
+            f"/public/shares/{token}/zip/download"
+        )
+        self.assertEqual(invalidated_public.status_code, 404)
+
+        with self.session_factory() as db:
+            record = (
+                db.query(AlbumZip)
+                .filter(AlbumZip.album_id == album_id)
+                .one()
+            )
+            self.assertIsNotNone(record.invalidated_at)
 
     def _write_file(self, path: Path, payload: bytes) -> None:
         path.write_bytes(payload)

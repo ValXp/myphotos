@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import secrets
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Response
+from fastapi.responses import FileResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -14,7 +15,10 @@ from app.db.models import Album, AlbumItem, Asset, ShareLink
 from app.downloads.zip_jobs import (
     ZipFailedError,
     ZipInProgressError,
+    album_zip_path,
+    album_zip_ready,
     album_zip_record,
+    invalidate_album_zip,
     latest_zip_job,
     start_album_zip_job,
     zip_status_payload,
@@ -135,6 +139,7 @@ def add_album_items(
                 )
             )
         album.updated_at = datetime.now(timezone.utc)
+        invalidate_album_zip(db, album_id)
     db.commit()
     item_count = _album_item_count(db, album_id)
     return {"added": new_ids, "skipped": skipped_ids, "item_count": item_count}
@@ -163,6 +168,7 @@ def remove_album_items(
         db.delete(item)
     if removed_ids:
         album.updated_at = datetime.now(timezone.utc)
+        invalidate_album_zip(db, album_id)
     db.commit()
     item_count = _album_item_count(db, album_id)
     return {"removed": removed_ids, "missing": missing_ids, "item_count": item_count}
@@ -240,6 +246,34 @@ def get_album_zip_status(
         raise HTTPException(status_code=404, detail="album not found")
     job = latest_zip_job(db, album_id)
     return zip_status_payload(job, album_zip_record(db, album_id), album_id)
+
+
+@router.get("/{album_id}/zip/download")
+def download_album_zip(
+    album_id: str,
+    db: Session = Depends(get_db),
+    config: Config = Depends(get_config),
+    _: OwnerSession = Depends(require_owner_session),
+) -> Response:
+    album = db.query(Album).filter(Album.id == album_id).one_or_none()
+    if album is None:
+        raise HTTPException(status_code=404, detail="album not found")
+    record = album_zip_record(db, album_id)
+    if not album_zip_ready(record):
+        raise HTTPException(status_code=404, detail="zip not found")
+    zip_path = album_zip_path(record, config.paths.derived)
+    try:
+        zip_path.stat()
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="zip not found") from exc
+    filename = f"album-{album_id}.zip"
+    headers = {"Cache-Control": "private, max-age=60"}
+    return FileResponse(
+        zip_path,
+        media_type="application/zip",
+        filename=filename,
+        headers=headers,
+    )
 
 
 def _serialize_album(album: Album, item_count: int) -> dict[str, object]:

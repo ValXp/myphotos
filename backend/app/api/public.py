@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, require_share_link
+from app.api.deps import get_config, get_db, require_share_link
+from app.config import Config
 from app.db.models import AlbumItem, Asset, ShareLink
+from app.downloads.zip_jobs import album_zip_path, album_zip_ready, album_zip_record
 
 
 router = APIRouter(prefix="/public/shares")
@@ -39,6 +42,30 @@ def list_public_album_assets(
     )
     items = [_serialize_asset_summary(asset) for _, asset in rows]
     return {"items": items}
+
+
+@router.get("/{token}/zip/download")
+def download_public_album_zip(
+    share: ShareLink = Depends(require_share_link),
+    db: Session = Depends(get_db),
+    config: Config = Depends(get_config),
+) -> Response:
+    record = album_zip_record(db, share.album_id)
+    if not album_zip_ready(record):
+        raise HTTPException(status_code=404, detail="zip not found")
+    zip_path = album_zip_path(record, config.paths.derived)
+    try:
+        zip_path.stat()
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="zip not found") from exc
+    filename = f"album-{share.album_id}.zip"
+    headers = {"Cache-Control": "private, max-age=60"}
+    return FileResponse(
+        zip_path,
+        media_type="application/zip",
+        filename=filename,
+        headers=headers,
+    )
 
 
 def _serialize_asset_summary(asset: Asset) -> dict[str, object]:
