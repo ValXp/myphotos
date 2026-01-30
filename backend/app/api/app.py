@@ -12,10 +12,13 @@ from app.auth.webauthn import (
     create_login_store,
     create_registration_store,
 )
+from app.ingest.admin import ScanBackoffPolicy
 from app.api.auth import router as auth_router
+from app.api.admin import router as admin_router
 from app.api.health import router as health_router
 from app.api.webauthn import router as webauthn_router
 from app.config import Config, load_config
+from app.queue import Queue, RedisQueueBackend, create_redis_client
 
 
 def create_app(
@@ -25,6 +28,8 @@ def create_app(
     registration_store: RegistrationChallengeStore | None = None,
     login_store: LoginChallengeStore | None = None,
     db_session_factory: sessionmaker[Session] | None = None,
+    queue: Queue | None = None,
+    scan_backoff: ScanBackoffPolicy | None = None,
 ) -> FastAPI:
     resolved = load_config() if config is None else config
     app = FastAPI(title="myphotos")
@@ -32,6 +37,8 @@ def create_app(
     app.state.session_store = session_store or create_session_store(resolved)
     app.state.registration_store = registration_store or create_registration_store(resolved)
     app.state.login_store = login_store or create_login_store(resolved)
+    app.state.queue = queue or Queue(RedisQueueBackend(create_redis_client(resolved.redis)))
+    app.state.scan_backoff = scan_backoff or ScanBackoffPolicy()
     if db_session_factory is None:
         app.state.db_engine = None
         app.state.db_session_factory = None
@@ -55,6 +62,7 @@ def create_app(
         return await call_next(request)
 
     app.include_router(auth_router)
+    app.include_router(admin_router)
     app.include_router(health_router)
     app.include_router(webauthn_router)
     return app

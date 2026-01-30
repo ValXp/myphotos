@@ -9,6 +9,8 @@ from app.auth.sessions import Session, SessionStore
 from app.auth.webauthn import LoginChallengeStore, RegistrationChallengeStore
 from app.config import Config
 from app.db.session import create_engine_from_config, create_session_factory
+from app.ingest.admin import ScanBackoffPolicy
+from app.queue import Queue
 
 
 def get_config(request: Request) -> Config:
@@ -25,6 +27,14 @@ def get_registration_store(request: Request) -> RegistrationChallengeStore:
 
 def get_login_store(request: Request) -> LoginChallengeStore:
     return request.app.state.login_store
+
+
+def get_queue(request: Request) -> Queue:
+    return request.app.state.queue
+
+
+def get_scan_backoff(request: Request) -> ScanBackoffPolicy:
+    return request.app.state.scan_backoff
 
 
 def get_owner_session(request: Request) -> Session | None:
