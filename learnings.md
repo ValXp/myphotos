@@ -38,3 +38,5 @@
 
 - 2026-01-30 02:55 MST: ZIP status should treat invalidated album zips as idle even if the latest job is done, otherwise status stays done after album changes.
 - 2026-01-30 03:03 MST: Frontend npm install reports 2 moderate vulnerabilities; run `npm audit` / `npm audit fix --force` if addressing.
+- 2026-01-30 03:24 MST: Frontend npm install reports 4 moderate vulnerabilities and a deprecation warning for whatwg-encoding; run `npm audit` / `npm audit fix --force` if addressing.
+- 2026-01-30 03:24 MST: React Router emits v7 future-flag warnings during frontend tests; optional to enable v7_startTransition and v7_relativeSplatPath flags.

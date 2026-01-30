@@ -58,3 +58,4 @@
 - 2026-01-30 02:55 MST - done - Add album zip download and invalidation
 - 2026-01-30 03:05 MST - done - Add owner app shell and auth gate UI
 - 2026-01-30 03:14 MST - done - Add passkey sign-in UI and session bootstrap
+- 2026-01-30 03:24 MST - done - Add timeline infinite scroll and tests

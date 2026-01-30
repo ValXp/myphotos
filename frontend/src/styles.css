@@ -201,6 +201,28 @@ button {
   height: 140px;
   border-radius: 14px;
   background: linear-gradient(135deg, rgba(31, 122, 122, 0.3), rgba(215, 102, 53, 0.35));
+  position: relative;
+  overflow: hidden;
+}
+
+.media-thumb::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.35));
+  pointer-events: none;
+}
+
+.media-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.4s ease;
+}
+
+.media-card:hover .media-thumb img {
+  transform: scale(1.04);
 }
 
 .media-meta h3 {
@@ -237,6 +259,60 @@ button {
 .viewer-controls {
   display: flex;
   gap: 12px;
+}
+
+.timeline-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.timeline-grid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.timeline-card .media-thumb {
+  height: 180px;
+}
+
+.media-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--ink);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.media-duration {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.timeline-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 0 24px;
+}
+
+.timeline-sentinel {
+  width: 100%;
+  height: 1px;
 }
 
 .signin {
