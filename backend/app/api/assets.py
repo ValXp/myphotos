@@ -6,11 +6,11 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import get_db, require_owner_session
 from app.auth.sessions import Session as OwnerSession
-from app.db.models import Asset
+from app.db.models import Asset, AssetVariant
 
 
 DEFAULT_PAGE_SIZE = 100
@@ -91,6 +91,23 @@ def list_assets(
     return {"items": items, "next_cursor": next_cursor}
 
 
+@router.get("/assets/{asset_id}")
+def get_asset_detail(
+    asset_id: str,
+    db: Session = Depends(get_db),
+    _: OwnerSession = Depends(require_owner_session),
+) -> dict[str, object]:
+    asset = (
+        db.query(Asset)
+        .options(selectinload(Asset.variants))
+        .filter(Asset.id == asset_id)
+        .one_or_none()
+    )
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    return _serialize_asset_detail(asset)
+
+
 def _serialize_asset_summary(asset: Asset) -> dict[str, object]:
     return {
         "id": asset.id,
@@ -102,6 +119,43 @@ def _serialize_asset_summary(asset: Asset) -> dict[str, object]:
         "height": asset.height,
         "live_photo_video_id": asset.live_photo_video_id,
     }
+
+
+def _serialize_asset_detail(asset: Asset) -> dict[str, object]:
+    variants = sorted(asset.variants, key=_variant_sort_key)
+    return {
+        "id": asset.id,
+        "type": asset.type,
+        "created_at": _isoformat(asset.created_at),
+        "captured_at": _isoformat(asset.captured_at),
+        "duration_ms": asset.duration_ms,
+        "width": asset.width,
+        "height": asset.height,
+        "lat": asset.lat,
+        "lon": asset.lon,
+        "hash": asset.hash,
+        "original_path": asset.original_path,
+        "original_bytes": asset.original_bytes,
+        "original_mime": asset.original_mime,
+        "live_photo_video_id": asset.live_photo_video_id,
+        "variants": [_serialize_variant(variant) for variant in variants],
+    }
+
+
+def _serialize_variant(variant: AssetVariant) -> dict[str, object]:
+    return {
+        "id": variant.id,
+        "kind": variant.kind,
+        "profile": variant.profile,
+        "path": variant.path,
+        "bytes": variant.bytes,
+        "created_at": _isoformat(variant.created_at),
+    }
+
+
+def _variant_sort_key(variant: AssetVariant) -> tuple[str, str, str]:
+    kind = variant.kind.value if variant.kind else ""
+    return (kind, variant.profile, variant.id)
 
 
 def _isoformat(value: datetime | None) -> str | None:
