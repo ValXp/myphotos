@@ -20,3 +20,4 @@
 - 2026-01-29 22:55: `python` is not available; use `python3` for tests.
 - 2026-01-29 23:05 MST: Pip is blocked by PEP 668; use a venv (e.g., /root/myphotos/.venv) for installing Python deps.
 - 2026-01-29 23:05 MST: SQLAlchemy relationship annotations cannot use a stringified union ("AlbumZip" | None); avoid `| None` in quotes to prevent MappedAnnotationError.
+- 2026-01-29 23:11 MST: Queue tests require the `redis` package; install backend deps in the venv before running the suite.

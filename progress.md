@@ -20,3 +20,4 @@
 
 - 2026-01-29 22:55 MST - done - Add config loader and storage layout
 - 2026-01-29 23:05 MST - done - Add core ORM models and Alembic migrations
+- 2026-01-29 23:12 MST - done - Add Redis queue wrapper and tests
