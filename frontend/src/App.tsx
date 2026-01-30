@@ -1,5 +1,6 @@
 import { NavLink, Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
+import { AlbumDetailView } from "./views/AlbumDetailView";
 import { AlbumsView } from "./views/AlbumsView";
 import { SignInView } from "./views/SignInView";
 import { TimelineView } from "./views/TimelineView";
@@ -90,6 +91,7 @@ export default function App() {
             <Route index element={<Navigate to="timeline" replace />} />
             <Route path="timeline" element={<TimelineView />} />
             <Route path="albums" element={<AlbumsView />} />
+            <Route path="albums/:albumId" element={<AlbumDetailView />} />
             <Route path="viewer" element={<ViewerView />} />
           </Route>
         </Route>

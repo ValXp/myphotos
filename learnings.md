@@ -40,3 +40,4 @@
 - 2026-01-30 03:03 MST: Frontend npm install reports 2 moderate vulnerabilities; run `npm audit` / `npm audit fix --force` if addressing.
 - 2026-01-30 03:24 MST: Frontend npm install reports 4 moderate vulnerabilities and a deprecation warning for whatwg-encoding; run `npm audit` / `npm audit fix --force` if addressing.
 - 2026-01-30 03:24 MST: React Router emits v7 future-flag warnings during frontend tests; optional to enable v7_startTransition and v7_relativeSplatPath flags.
+- 2026-01-30 03:33 MST: Pytest was missing from /root/myphotos/.venv; installed it to run backend tests.

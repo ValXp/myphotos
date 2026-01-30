@@ -205,6 +205,24 @@ button {
   overflow: hidden;
 }
 
+.album-cover {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  padding: 14px;
+}
+
+.album-count {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--ink);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
 .media-thumb::after {
   content: "";
   position: absolute;
@@ -266,6 +284,28 @@ button {
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
+}
+
+.album-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.album-grid {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.album-media-card .media-thumb {
+  height: 160px;
 }
 
 .timeline-grid {

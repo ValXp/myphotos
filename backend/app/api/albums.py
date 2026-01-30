@@ -50,6 +50,39 @@ def list_albums(
     return {"items": items}
 
 
+@router.get("/{album_id}")
+def get_album(
+    album_id: str,
+    db: Session = Depends(get_db),
+    _: OwnerSession = Depends(require_owner_session),
+) -> dict[str, object]:
+    album = db.query(Album).filter(Album.id == album_id).one_or_none()
+    if album is None:
+        raise HTTPException(status_code=404, detail="album not found")
+    item_count = _album_item_count(db, album.id)
+    return _serialize_album(album, item_count)
+
+
+@router.get("/{album_id}/assets")
+def list_album_assets(
+    album_id: str,
+    db: Session = Depends(get_db),
+    _: OwnerSession = Depends(require_owner_session),
+) -> dict[str, object]:
+    album = db.query(Album).filter(Album.id == album_id).one_or_none()
+    if album is None:
+        raise HTTPException(status_code=404, detail="album not found")
+    rows = (
+        db.query(AlbumItem, Asset)
+        .join(Asset, AlbumItem.asset_id == Asset.id)
+        .filter(AlbumItem.album_id == album_id)
+        .order_by(AlbumItem.order_index.asc(), AlbumItem.asset_id.asc())
+        .all()
+    )
+    items = [_serialize_asset_summary(asset) for _, asset in rows]
+    return {"items": items}
+
+
 @router.post("")
 def create_album(
     payload: dict[str, object] = Body(...),
@@ -293,6 +326,19 @@ def _serialize_share_link(share: ShareLink) -> dict[str, object]:
         "token": share.token,
         "created_at": _isoformat(share.created_at),
         "revoked_at": _isoformat(share.revoked_at),
+    }
+
+
+def _serialize_asset_summary(asset: Asset) -> dict[str, object]:
+    return {
+        "id": asset.id,
+        "type": asset.type,
+        "captured_at": _isoformat(asset.captured_at),
+        "created_at": _isoformat(asset.created_at),
+        "duration_ms": asset.duration_ms,
+        "width": asset.width,
+        "height": asset.height,
+        "live_photo_video_id": asset.live_photo_video_id,
     }
 
 
