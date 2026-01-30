@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 import mimetypes
 import os
 from pathlib import Path
-from typing import Iterable, Iterator
+from typing import Callable, Iterable, Iterator
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -24,10 +24,31 @@ class ScanStats:
     errors: list[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class AssetUpsert:
+    asset: Asset
+    created: bool
+    updated: bool
+
+    @property
+    def changed(self) -> bool:
+        return self.created or self.updated
+
+
+AssetChangeCallback = Callable[[AssetUpsert], None]
+
+
 class FullScanJob:
-    def __init__(self, roots: Iterable[str | Path], *, follow_symlinks: bool = False) -> None:
+    def __init__(
+        self,
+        roots: Iterable[str | Path],
+        *,
+        follow_symlinks: bool = False,
+        on_change: AssetChangeCallback | None = None,
+    ) -> None:
         self._roots = tuple(Path(root) for root in roots)
         self._follow_symlinks = follow_symlinks
+        self._on_change = on_change
 
     def run(self, session: Session) -> ScanStats:
         stats = ScanStats()
@@ -43,42 +64,39 @@ class FullScanJob:
             except OSError as exc:
                 stats.errors.append(f"{path}: {exc}")
                 continue
-            size = stat.st_size
-            device = stat.st_dev
-            inode = stat.st_ino
-            mtime_ns = stat.st_mtime_ns
-            mime = guess_mime(path)
-            asset_type = asset_type_for_path(path)
-            normalized = normalize_path(path)
-            asset = session.execute(
-                select(Asset).where(Asset.original_path == normalized)
-            ).scalar_one_or_none()
-            if asset is None:
-                session.add(
-                    Asset(
-                        type=asset_type,
-                        original_path=normalized,
-                        original_bytes=size,
-                        original_mime=mime,
-                        original_device=device,
-                        original_inode=inode,
-                        original_mtime_ns=mtime_ns,
-                    )
-                )
+            upsert = _upsert_asset_from_stat(session, path, stat)
+            if upsert.created:
                 stats.created += 1
+            elif upsert.updated:
+                stats.updated += 1
             else:
-                if _update_asset(asset, asset_type, size, mime, device, inode, mtime_ns):
-                    stats.updated += 1
-                else:
-                    stats.unchanged += 1
+                stats.unchanged += 1
+            if upsert.changed and self._on_change is not None:
+                if upsert.created:
+                    session.flush()
+                self._on_change(upsert)
         session.commit()
         return stats
 
 
 def run_full_scan(
-    session: Session, roots: Iterable[str | Path], *, follow_symlinks: bool = False
+    session: Session,
+    roots: Iterable[str | Path],
+    *,
+    follow_symlinks: bool = False,
+    on_change: AssetChangeCallback | None = None,
 ) -> ScanStats:
-    return FullScanJob(roots, follow_symlinks=follow_symlinks).run(session)
+    return FullScanJob(roots, follow_symlinks=follow_symlinks, on_change=on_change).run(session)
+
+
+def upsert_asset(session: Session, path: Path) -> AssetUpsert | None:
+    if not is_supported(path):
+        return None
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    return _upsert_asset_from_stat(session, path, stat)
 
 
 def iter_scan_paths(
@@ -129,6 +147,35 @@ def guess_mime(path: Path) -> str:
 
 def normalize_path(path: Path) -> str:
     return str(path.expanduser().resolve(strict=False))
+
+
+def _upsert_asset_from_stat(
+    session: Session, path: Path, stat: os.stat_result
+) -> AssetUpsert:
+    size = stat.st_size
+    device = stat.st_dev
+    inode = stat.st_ino
+    mtime_ns = stat.st_mtime_ns
+    mime = guess_mime(path)
+    asset_type = asset_type_for_path(path)
+    normalized = normalize_path(path)
+    asset = session.execute(
+        select(Asset).where(Asset.original_path == normalized)
+    ).scalar_one_or_none()
+    if asset is None:
+        asset = Asset(
+            type=asset_type,
+            original_path=normalized,
+            original_bytes=size,
+            original_mime=mime,
+            original_device=device,
+            original_inode=inode,
+            original_mtime_ns=mtime_ns,
+        )
+        session.add(asset)
+        return AssetUpsert(asset=asset, created=True, updated=False)
+    updated = _update_asset(asset, asset_type, size, mime, device, inode, mtime_ns)
+    return AssetUpsert(asset=asset, created=False, updated=updated)
 
 
 def _update_asset(

@@ -34,3 +34,4 @@
 - 2026-01-30 00:08 MST - done - Add full scan job and unit tests
 - 2026-01-30 00:17 MST - done - Add filesystem watcher events
 - 2026-01-30 00:26 MST - done - Add move/delete reconciliation logic
+- 2026-01-30 00:35 MST - done - Enqueue ingest jobs for new or changed assets

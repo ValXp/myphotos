@@ -29,3 +29,4 @@
 - 2026-01-29 23:52 MST: FastAPI set-cookie headers render SameSite as lowercase (SameSite=lax); test cookie attribute checks should be case-insensitive.
 - 2026-01-30 00:08 MST: In-memory SQLite tests should dispose engines to avoid ResourceWarning messages.
 - 2026-01-30 00:26 MST: Reconciliation relies on asset identity columns (original_device/original_inode/original_mtime_ns) populated during scans for move matching.
+- 2026-01-30 00:35 MST: Enqueueing jobs for newly created assets needs a session flush so the asset ID is available for job payloads before commit.
