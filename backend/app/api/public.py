@@ -20,7 +20,16 @@ from app.api.deps import get_config, get_db, require_share_link
 from app.config import Config
 from app.db.enums import AssetType
 from app.db.models import AlbumItem, Asset, ShareLink
-from app.downloads.zip_jobs import album_zip_path, album_zip_ready, album_zip_record
+from app.downloads.zip_jobs import (
+    ZipFailedError,
+    ZipInProgressError,
+    album_zip_path,
+    album_zip_ready,
+    album_zip_record,
+    latest_zip_job,
+    start_album_zip_job,
+    zip_status_payload,
+)
 
 
 router = APIRouter(prefix="/public/shares")
@@ -53,6 +62,54 @@ def list_public_album_assets(
     )
     items = [_serialize_asset_summary(asset) for _, asset in rows]
     return {"items": items}
+
+
+@router.post("/{token}/zip")
+def start_public_album_zip(
+    response: Response,
+    share: ShareLink = Depends(require_share_link),
+    db: Session = Depends(get_db),
+    config: Config = Depends(get_config),
+) -> dict[str, object]:
+    download_url = _public_zip_download_url(share.token)
+    try:
+        job = start_album_zip_job(db, share.album_id, config)
+    except ZipInProgressError as exc:
+        response.status_code = 409
+        return zip_status_payload(
+            exc.job,
+            album_zip_record(db, share.album_id),
+            share.album_id,
+            download_url=download_url,
+        )
+    except ZipFailedError as exc:
+        response.status_code = 500
+        return zip_status_payload(
+            exc.job,
+            album_zip_record(db, share.album_id),
+            share.album_id,
+            download_url=download_url,
+        )
+    return zip_status_payload(
+        job,
+        album_zip_record(db, share.album_id),
+        share.album_id,
+        download_url=download_url,
+    )
+
+
+@router.get("/{token}/zip")
+def get_public_album_zip_status(
+    share: ShareLink = Depends(require_share_link),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    job = latest_zip_job(db, share.album_id)
+    return zip_status_payload(
+        job,
+        album_zip_record(db, share.album_id),
+        share.album_id,
+        download_url=_public_zip_download_url(share.token),
+    )
 
 
 @router.get("/{token}/assets/{asset_id}/thumb")
@@ -154,6 +211,10 @@ def _serialize_asset_summary(asset: Asset) -> dict[str, object]:
         "height": asset.height,
         "live_photo_video_id": asset.live_photo_video_id,
     }
+
+
+def _public_zip_download_url(token: str) -> str:
+    return f"/public/shares/{token}/zip/download"
 
 
 def _isoformat(value: datetime | None) -> str | None:

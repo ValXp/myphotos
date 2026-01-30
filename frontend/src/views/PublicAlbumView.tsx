@@ -51,11 +51,37 @@ type AlbumAssetsResponse = {
   items: AssetSummary[];
 };
 
+type ZipStatus = "idle" | "queued" | "running" | "done" | "failed";
+
+type ZipStatusResponse = {
+  status: ZipStatus;
+  album_id: string;
+  job_id: string | null;
+  asset_count: number | null;
+  zip_bytes: number | null;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string | null;
+  invalidated_at: string | null;
+  download_url: string | null;
+  error: string | null;
+};
+
 function buildApiUrl(path: string): string {
   if (!API_BASE_URL) {
     return path;
   }
   return `${API_BASE_URL.replace(/\/$/, "")}${path}`;
+}
+
+function resolveApiUrl(path: string): string {
+  if (!path) {
+    return path;
+  }
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+  return buildApiUrl(path);
 }
 
 async function requestJson<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -101,6 +127,29 @@ function parseDate(value: string | null): Date | null {
     return null;
   }
   return parsed;
+}
+
+function formatBytes(bytes: number | null): string | null {
+  if (!bytes || bytes <= 0) {
+    return null;
+  }
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let size = bytes;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  const decimals = size < 10 && unitIndex > 0 ? 1 : 0;
+  return `${size.toFixed(decimals)} ${units[unitIndex]}`;
+}
+
+function formatTimestamp(value: string | null): string | null {
+  const date = parseDate(value);
+  if (!date) {
+    return null;
+  }
+  return `${dateFormatter.format(date)} at ${timeFormatter.format(date)}`;
 }
 
 function formatAlbumUpdated(album: PublicAlbum): string {
@@ -166,6 +215,28 @@ function formatTypeLabel(type: AssetType): string {
   return "Photo";
 }
 
+function formatZipStatusLabel(status: ZipStatus | null | undefined): string {
+  if (!status) {
+    return "Checking download status...";
+  }
+  if (status === "idle") {
+    return "No ZIP ready yet.";
+  }
+  if (status === "queued") {
+    return "ZIP queued for preparation.";
+  }
+  if (status === "running") {
+    return "Preparing the ZIP bundle.";
+  }
+  if (status === "done") {
+    return "ZIP ready to download.";
+  }
+  if (status === "failed") {
+    return "ZIP failed to generate.";
+  }
+  return "Checking download status...";
+}
+
 function thumbnailUrl(token: string, assetId: string): string {
   const safeToken = encodeURIComponent(token);
   const safeId = encodeURIComponent(assetId);
@@ -187,6 +258,9 @@ export function PublicAlbumView() {
   const [items, setItems] = useState<AssetSummary[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [zipInfo, setZipInfo] = useState<ZipStatusResponse | null>(null);
+  const [zipAction, setZipAction] = useState<"idle" | "checking" | "starting">("idle");
+  const [zipError, setZipError] = useState<string | null>(null);
 
   const loadShare = useCallback(async () => {
     if (!token) {
@@ -214,12 +288,125 @@ export function PublicAlbumView() {
     }
   }, [token]);
 
+  const loadZipStatus = useCallback(
+    async (silent = false) => {
+      if (!token) {
+        if (!silent) {
+          setZipError("Share link missing.");
+        }
+        return;
+      }
+      if (!silent) {
+        setZipAction("checking");
+        setZipError(null);
+      }
+      try {
+        const safeToken = encodeURIComponent(token);
+        const zipData = await requestJson<ZipStatusResponse>(
+          `/public/shares/${safeToken}/zip`,
+          { method: "GET" }
+        );
+        setZipInfo(zipData);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unable to load ZIP status.";
+        if (!silent) {
+          setZipError(message);
+        }
+      } finally {
+        if (!silent) {
+          setZipAction("idle");
+        }
+      }
+    },
+    [token]
+  );
+
+  const handleZipStart = useCallback(async () => {
+    if (!token) {
+      setZipError("Share link missing.");
+      return;
+    }
+    setZipAction("starting");
+    setZipError(null);
+    try {
+      const safeToken = encodeURIComponent(token);
+      const zipData = await requestJson<ZipStatusResponse>(
+        `/public/shares/${safeToken}/zip`,
+        { method: "POST" }
+      );
+      setZipInfo(zipData);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to prepare ZIP download.";
+      setZipError(message);
+    } finally {
+      setZipAction("idle");
+    }
+  }, [token]);
+
   useEffect(() => {
     void loadShare();
   }, [loadShare]);
 
+  useEffect(() => {
+    setZipInfo(null);
+    setZipError(null);
+    setZipAction("idle");
+  }, [token]);
+
+  useEffect(() => {
+    void loadZipStatus();
+  }, [loadZipStatus]);
+
+  useEffect(() => {
+    if (!zipInfo || (zipInfo.status !== "queued" && zipInfo.status !== "running")) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void loadZipStatus(true);
+    }, 3000);
+    return () => window.clearTimeout(timer);
+  }, [zipInfo, loadZipStatus]);
+
   const hasItems = items.length > 0;
   const isLoading = status === "loading";
+  const zipInProgress = zipInfo?.status === "queued" || zipInfo?.status === "running";
+  const zipDownloadUrl = zipInfo?.download_url ? resolveApiUrl(zipInfo.download_url) : null;
+  const zipStatusMessage = zipError
+    ? zipError
+    : zipAction === "starting"
+      ? "Starting ZIP job..."
+      : zipAction === "checking" && !zipInfo
+        ? "Checking download status..."
+        : formatZipStatusLabel(zipInfo?.status);
+  const zipStatusTone = zipError || zipInfo?.status === "failed" ? "error" : zipInfo?.status === "done" ? "success" : "";
+  const zipFailureDetail =
+    !zipError && zipInfo?.status === "failed" && zipInfo.error
+      ? `Error: ${zipInfo.error}`
+      : null;
+  const zipMetaParts: string[] = [];
+  if (zipInfo?.asset_count) {
+    zipMetaParts.push(formatItemCount(zipInfo.asset_count));
+  }
+  const zipSize = formatBytes(zipInfo?.zip_bytes ?? null);
+  if (zipSize) {
+    zipMetaParts.push(zipSize);
+  }
+  const finishedLabel = formatTimestamp(zipInfo?.finished_at ?? zipInfo?.created_at ?? null);
+  if (finishedLabel && zipInfo?.status === "done") {
+    zipMetaParts.push(`Ready ${finishedLabel}`);
+  }
+  const startedLabel = formatTimestamp(zipInfo?.started_at ?? null);
+  if (startedLabel && zipInfo && zipInfo.status !== "done") {
+    zipMetaParts.push(`Started ${startedLabel}`);
+  }
+  const zipPrimaryLabel = zipAction === "starting"
+    ? "Starting ZIP..."
+    : zipInProgress
+      ? "Preparing ZIP..."
+      : zipInfo?.status === "failed"
+        ? "Retry ZIP"
+        : "Prepare ZIP";
+  const isZipBusy = zipAction !== "idle";
 
   return (
     <section className="public-page">
@@ -246,6 +433,55 @@ export function PublicAlbumView() {
           </p>
         </div>
       </header>
+      <div className="public-panels">
+        <div className="public-panel accent public-download">
+          <p className="eyebrow">Download</p>
+          <h2>Take the originals with you</h2>
+          <p className="subhead">
+            Generate a ZIP of the original files. Large albums can take a moment to
+            prepare.
+          </p>
+          <div
+            className={`status${zipStatusTone ? ` ${zipStatusTone}` : ""}`}
+            role={zipStatusTone === "error" ? "alert" : "status"}
+          >
+            {zipStatusMessage}
+          </div>
+          {zipFailureDetail && <p className="hint">{zipFailureDetail}</p>}
+          {zipMetaParts.length > 0 && (
+            <div className="pill-group">
+              {zipMetaParts.map((part) => (
+                <span className="pill" key={part}>
+                  {part}
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="zip-actions">
+            {zipDownloadUrl && zipInfo?.status === "done" ? (
+              <a className="primary" href={zipDownloadUrl} rel="noreferrer">
+                Download ZIP
+              </a>
+            ) : (
+              <button
+                className="primary"
+                onClick={handleZipStart}
+                disabled={!token || isZipBusy || zipInProgress}
+              >
+                {zipPrimaryLabel}
+              </button>
+            )}
+            <button
+              className="ghost"
+              onClick={() => void loadZipStatus()}
+              disabled={!token || isZipBusy}
+            >
+              Check status
+            </button>
+          </div>
+          <p className="hint">ZIPs update automatically when the album changes.</p>
+        </div>
+      </div>
       {error && (
         <div className="status error" role="alert">
           {error}

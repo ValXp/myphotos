@@ -219,6 +219,17 @@ button {
   background: linear-gradient(135deg, rgba(215, 102, 53, 0.15), rgba(227, 179, 65, 0.18));
 }
 
+.public-download {
+  gap: 16px;
+}
+
+.zip-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
 .page {
   display: flex;
   flex-direction: column;
@@ -254,6 +265,10 @@ button {
 }
 
 .primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   padding: 12px 20px;
   border-radius: 999px;
   background: var(--accent);

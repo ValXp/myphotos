@@ -147,9 +147,17 @@ def zip_status_payload(
     job: Job | None,
     album_zip: AlbumZip | None,
     album_id: str,
+    *,
+    download_url: str | None = None,
 ) -> dict[str, object]:
     status = _zip_status(job, album_zip)
     payload = job.payload or {} if job is not None else {}
+    if download_url is None:
+        resolved_download = _download_url(album_zip, album_id)
+    elif album_zip is not None and album_zip.invalidated_at is None:
+        resolved_download = download_url
+    else:
+        resolved_download = None
     return {
         "status": status,
         "album_id": album_id,
@@ -160,7 +168,7 @@ def zip_status_payload(
         "finished_at": payload.get("finished_at"),
         "created_at": _isoformat(album_zip.created_at) if album_zip else None,
         "invalidated_at": _isoformat(album_zip.invalidated_at) if album_zip else None,
-        "download_url": _download_url(album_zip, album_id),
+        "download_url": resolved_download,
         "error": payload.get("error"),
     }
 

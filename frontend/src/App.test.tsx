@@ -71,6 +71,20 @@ describe("App flows", () => {
       ]
     };
 
+    const zipStatusPayload = {
+      status: "idle",
+      album_id: "album-public-1",
+      job_id: null,
+      asset_count: 1,
+      zip_bytes: null,
+      started_at: null,
+      finished_at: null,
+      created_at: null,
+      invalidated_at: null,
+      download_url: null,
+      error: null
+    };
+
     const fetchMock = vi.fn().mockImplementation((input: RequestInfo) => {
       const url = typeof input === "string" ? input : input.url;
       if (url.includes("/public/shares/demo-token/album")) {
@@ -87,6 +101,14 @@ describe("App flows", () => {
           status: 200,
           statusText: "OK",
           json: async () => assetsPayload
+        });
+      }
+      if (url.includes("/public/shares/demo-token/zip")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => zipStatusPayload
         });
       }
       return Promise.resolve({
@@ -110,6 +132,9 @@ describe("App flows", () => {
     expect(
       await screen.findByRole("img", { name: "Photo thumbnail from Jan 20, 2026" })
     ).toHaveAttribute("src", expect.stringContaining("/public/shares/demo-token/assets"));
+    expect(
+      await screen.findByRole("button", { name: /prepare zip/i })
+    ).toBeInTheDocument();
     expect(screen.queryByText(/unlock your library/i)).not.toBeInTheDocument();
   });
 
@@ -185,6 +210,196 @@ describe("App flows", () => {
     expect(
       await screen.findByRole("img", { name: /live photo preview from jan 18, 2026/i })
     ).toBeInTheDocument();
+  });
+
+  it("starts and completes public ZIP downloads", async () => {
+    mockedSessionStatus.mockResolvedValue(false);
+
+    const albumPayload = {
+      id: "album-public-zip",
+      title: "Holiday share",
+      created_at: "2026-01-10T08:00:00Z",
+      updated_at: "2026-01-12T08:00:00Z"
+    };
+
+    const assetsPayload = {
+      items: []
+    };
+
+    const zipStatusIdle = {
+      status: "idle",
+      album_id: "album-public-zip",
+      job_id: null,
+      asset_count: null,
+      zip_bytes: null,
+      started_at: null,
+      finished_at: null,
+      created_at: null,
+      invalidated_at: null,
+      download_url: null,
+      error: null
+    };
+
+    const zipStatusDone = {
+      status: "done",
+      album_id: "album-public-zip",
+      job_id: "job-zip-1",
+      asset_count: 14,
+      zip_bytes: 2048,
+      started_at: "2026-01-20T10:00:00Z",
+      finished_at: "2026-01-20T10:01:00Z",
+      created_at: "2026-01-20T10:01:00Z",
+      invalidated_at: null,
+      download_url: "/public/shares/demo-token/zip/download",
+      error: null
+    };
+
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.url;
+      const method =
+        (init?.method ?? (typeof input === "string" ? "GET" : input.method)).toUpperCase();
+      if (url.includes("/public/shares/demo-token/album")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => albumPayload
+        });
+      }
+      if (url.includes("/public/shares/demo-token/assets")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => assetsPayload
+        });
+      }
+      if (url.includes("/public/shares/demo-token/zip") && method === "POST") {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => zipStatusDone
+        });
+      }
+      if (url.includes("/public/shares/demo-token/zip")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => zipStatusIdle
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({})
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <MemoryRouter initialEntries={["/share/demo-token"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    const prepareButton = await screen.findByRole("button", { name: /prepare zip/i });
+    await waitFor(() => expect(prepareButton).toBeEnabled());
+    fireEvent.click(prepareButton);
+
+    const downloadLink = await screen.findByRole("link", { name: /download zip/i });
+    expect(downloadLink).toHaveAttribute(
+      "href",
+      expect.stringContaining("/public/shares/demo-token/zip/download")
+    );
+  });
+
+  it("shows public ZIP errors when preparation fails", async () => {
+    mockedSessionStatus.mockResolvedValue(false);
+
+    const albumPayload = {
+      id: "album-public-zip-error",
+      title: "Error share",
+      created_at: "2026-01-15T08:00:00Z",
+      updated_at: "2026-01-15T08:00:00Z"
+    };
+
+    const assetsPayload = {
+      items: []
+    };
+
+    const zipStatusIdle = {
+      status: "idle",
+      album_id: "album-public-zip-error",
+      job_id: null,
+      asset_count: null,
+      zip_bytes: null,
+      started_at: null,
+      finished_at: null,
+      created_at: null,
+      invalidated_at: null,
+      download_url: null,
+      error: null
+    };
+
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.url;
+      const method =
+        (init?.method ?? (typeof input === "string" ? "GET" : input.method)).toUpperCase();
+      if (url.includes("/public/shares/demo-token/album")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => albumPayload
+        });
+      }
+      if (url.includes("/public/shares/demo-token/assets")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => assetsPayload
+        });
+      }
+      if (url.includes("/public/shares/demo-token/zip") && method === "POST") {
+        return Promise.resolve({
+          ok: false,
+          status: 500,
+          statusText: "Server error",
+          json: async () => ({ detail: "zip failed" })
+        });
+      }
+      if (url.includes("/public/shares/demo-token/zip")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => zipStatusIdle
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({})
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <MemoryRouter initialEntries={["/share/demo-token"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    const prepareButton = await screen.findByRole("button", { name: /prepare zip/i });
+    await waitFor(() => expect(prepareButton).toBeEnabled());
+    fireEvent.click(prepareButton);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/zip failed/i);
   });
 
   it("renders timeline cards for authenticated owners", async () => {

@@ -46,3 +46,4 @@
 
 - 2026-01-30 04:23 MST: Frontend tests can leave duplicate DOM nodes without cleanup; call React Testing Library cleanup in tests when using multiple renders.
 - 2026-01-30 04:53 MST: MemoryRouter initialEntries are only applied on mount; use cleanup/new render (or a keyed router) to change routes in tests.
+- 2026-01-30 05:07 MST: Public share ZIP preparation/status endpoints are `/public/shares/{token}/zip`, returning a share-scoped download URL.
