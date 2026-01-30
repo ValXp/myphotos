@@ -1,0 +1,216 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Body, Depends, HTTPException
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from app.api.deps import get_db, require_owner_session
+from app.auth.sessions import Session as OwnerSession
+from app.db.models import Album, AlbumItem, Asset
+
+router = APIRouter(prefix="/albums")
+
+
+@router.get("")
+def list_albums(
+    db: Session = Depends(get_db),
+    _: OwnerSession = Depends(require_owner_session),
+) -> dict[str, object]:
+    counts = (
+        db.query(
+            AlbumItem.album_id,
+            func.count(AlbumItem.asset_id).label("item_count"),
+        )
+        .group_by(AlbumItem.album_id)
+        .subquery()
+    )
+    rows = (
+        db.query(Album, func.coalesce(counts.c.item_count, 0))
+        .outerjoin(counts, counts.c.album_id == Album.id)
+        .order_by(Album.updated_at.desc(), Album.id.desc())
+        .all()
+    )
+    items = [_serialize_album(album, int(count)) for album, count in rows]
+    return {"items": items}
+
+
+@router.post("")
+def create_album(
+    payload: dict[str, object] = Body(...),
+    db: Session = Depends(get_db),
+    _: OwnerSession = Depends(require_owner_session),
+) -> dict[str, object]:
+    title = _require_title(payload)
+    album = Album(title=title)
+    db.add(album)
+    db.commit()
+    db.refresh(album)
+    return _serialize_album(album, item_count=0)
+
+
+@router.patch("/{album_id}")
+def update_album(
+    album_id: str,
+    payload: dict[str, object] = Body(...),
+    db: Session = Depends(get_db),
+    _: OwnerSession = Depends(require_owner_session),
+) -> dict[str, object]:
+    album = db.query(Album).filter(Album.id == album_id).one_or_none()
+    if album is None:
+        raise HTTPException(status_code=404, detail="album not found")
+    title = _require_title(payload)
+    album.title = title
+    db.commit()
+    db.refresh(album)
+    item_count = _album_item_count(db, album.id)
+    return _serialize_album(album, item_count)
+
+
+@router.delete("/{album_id}")
+def delete_album(
+    album_id: str,
+    db: Session = Depends(get_db),
+    _: OwnerSession = Depends(require_owner_session),
+) -> dict[str, object]:
+    album = db.query(Album).filter(Album.id == album_id).one_or_none()
+    if album is None:
+        raise HTTPException(status_code=404, detail="album not found")
+    db.delete(album)
+    db.commit()
+    return {"status": "deleted"}
+
+
+@router.post("/{album_id}/items")
+def add_album_items(
+    album_id: str,
+    payload: dict[str, object] = Body(...),
+    db: Session = Depends(get_db),
+    _: OwnerSession = Depends(require_owner_session),
+) -> dict[str, object]:
+    album = db.query(Album).filter(Album.id == album_id).one_or_none()
+    if album is None:
+        raise HTTPException(status_code=404, detail="album not found")
+    asset_ids = _require_asset_ids(payload)
+    existing_assets = {
+        row[0]
+        for row in db.query(Asset.id).filter(Asset.id.in_(asset_ids)).all()
+    }
+    missing_assets = [asset_id for asset_id in asset_ids if asset_id not in existing_assets]
+    if missing_assets:
+        raise HTTPException(status_code=404, detail="asset not found")
+    existing_items = {
+        row[0]
+        for row in db.query(AlbumItem.asset_id)
+        .filter(AlbumItem.album_id == album_id)
+        .filter(AlbumItem.asset_id.in_(asset_ids))
+        .all()
+    }
+    new_ids = [asset_id for asset_id in asset_ids if asset_id not in existing_items]
+    skipped_ids = [asset_id for asset_id in asset_ids if asset_id in existing_items]
+    if new_ids:
+        max_order = (
+            db.query(func.max(AlbumItem.order_index))
+            .filter(AlbumItem.album_id == album_id)
+            .scalar()
+        )
+        next_index = 0 if max_order is None else int(max_order) + 1
+        for offset, asset_id in enumerate(new_ids):
+            db.add(
+                AlbumItem(
+                    album_id=album_id,
+                    asset_id=asset_id,
+                    order_index=next_index + offset,
+                )
+            )
+        album.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    item_count = _album_item_count(db, album_id)
+    return {"added": new_ids, "skipped": skipped_ids, "item_count": item_count}
+
+
+@router.delete("/{album_id}/items")
+def remove_album_items(
+    album_id: str,
+    payload: dict[str, object] = Body(...),
+    db: Session = Depends(get_db),
+    _: OwnerSession = Depends(require_owner_session),
+) -> dict[str, object]:
+    album = db.query(Album).filter(Album.id == album_id).one_or_none()
+    if album is None:
+        raise HTTPException(status_code=404, detail="album not found")
+    asset_ids = _require_asset_ids(payload)
+    items = (
+        db.query(AlbumItem)
+        .filter(AlbumItem.album_id == album_id)
+        .filter(AlbumItem.asset_id.in_(asset_ids))
+        .all()
+    )
+    removed_ids = [item.asset_id for item in items]
+    missing_ids = [asset_id for asset_id in asset_ids if asset_id not in removed_ids]
+    for item in items:
+        db.delete(item)
+    if removed_ids:
+        album.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    item_count = _album_item_count(db, album_id)
+    return {"removed": removed_ids, "missing": missing_ids, "item_count": item_count}
+
+
+def _serialize_album(album: Album, item_count: int) -> dict[str, object]:
+    return {
+        "id": album.id,
+        "title": album.title,
+        "created_at": _isoformat(album.created_at),
+        "updated_at": _isoformat(album.updated_at),
+        "item_count": item_count,
+    }
+
+
+def _isoformat(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.isoformat()
+
+
+def _require_title(payload: dict[str, object]) -> str:
+    raw = payload.get("title")
+    if not isinstance(raw, str):
+        raise HTTPException(status_code=400, detail="title required")
+    title = raw.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="title required")
+    return title
+
+
+def _require_asset_ids(payload: dict[str, object]) -> list[str]:
+    raw = payload.get("asset_ids")
+    if not isinstance(raw, list):
+        raise HTTPException(status_code=400, detail="asset_ids required")
+    seen: set[str] = set()
+    asset_ids: list[str] = []
+    for value in raw:
+        if not isinstance(value, str):
+            raise HTTPException(status_code=400, detail="asset_ids must be strings")
+        asset_id = value.strip()
+        if not asset_id:
+            raise HTTPException(status_code=400, detail="asset_ids must be non-empty")
+        if asset_id in seen:
+            continue
+        seen.add(asset_id)
+        asset_ids.append(asset_id)
+    if not asset_ids:
+        raise HTTPException(status_code=400, detail="asset_ids required")
+    return asset_ids
+
+
+def _album_item_count(db: Session, album_id: str) -> int:
+    count = (
+        db.query(func.count(AlbumItem.asset_id))
+        .filter(AlbumItem.album_id == album_id)
+        .scalar()
+    )
+    return int(count or 0)
