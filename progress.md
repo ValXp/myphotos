@@ -83,3 +83,5 @@
 - 2026-01-30 08:39 MST - done - Add live photo live video variant in transcode
 - 2026-01-30 08:51 MST - done - Add media worker runner and tests
 - 2026-01-30 08:59 MST - done - Add indexer runner and tests
+
+- 2026-01-30 09:06 MST - done - Add trusted proxy header support

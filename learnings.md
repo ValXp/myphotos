@@ -55,3 +55,5 @@
 - 2026-01-30 05:50 MST: Integration tests are gated by INTEGRATION_TESTS=1 and require INTEGRATION_DB_URL/INTEGRATION_REDIS_URL with psycopg for Postgres connectivity.
 - 2026-01-30 08:29 MST: Integration tests require running Redis/Postgres services; installed and started redis-server and postgresql locally.
 - 2026-01-30 08:29 MST: Normalized postgres URLs without an explicit driver to use psycopg, avoiding a psycopg2 dependency.
+
+- 2026-01-30 09:06 MST: Starlette URL uses the Host header ahead of scope server; honoring X-Forwarded-Host requires updating scope headers (TestClient client host is "testclient").

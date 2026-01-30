@@ -29,6 +29,7 @@ class ConfigLoaderTest(unittest.TestCase):
             self.assertEqual(config.app.host, "127.0.0.1")
             self.assertEqual(config.app.port, 8000)
             self.assertEqual(config.app.log_level, "INFO")
+            self.assertEqual(config.app.trusted_proxy_ips, ())
             self.assertEqual(config.webauthn.rp_id, "127.0.0.1")
             self.assertEqual(config.webauthn.rp_name, DEFAULT_WEBAUTHN_RP_NAME)
             self.assertEqual(config.webauthn.origins, ("http://127.0.0.1:8000",))
@@ -85,6 +86,7 @@ class ConfigLoaderTest(unittest.TestCase):
             self.assertIn('"app"', rendered)
             self.assertIn('"session"', rendered)
             self.assertIn('"port": 8080', rendered)
+            self.assertIn('"trusted_proxy_ips"', rendered)
 
     def test_webauthn_overrides(self) -> None:
         with tempfile.TemporaryDirectory() as root:
@@ -116,3 +118,17 @@ class ConfigLoaderTest(unittest.TestCase):
 
             self.assertEqual(config.session.ttl_seconds, 7200)
             self.assertEqual(config.session.cookie_name, "photos_session")
+
+    def test_trusted_proxy_overrides(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            config = load_config(
+                {
+                    "DATA_ROOT": root,
+                    "TRUSTED_PROXY_IPS": "10.0.0.1, 10.0.0.0/24",
+                }
+            )
+
+            self.assertEqual(
+                config.app.trusted_proxy_ips,
+                ("10.0.0.1", "10.0.0.0/24"),
+            )

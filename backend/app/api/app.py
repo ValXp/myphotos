@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
+from ipaddress import ip_address, ip_network
 from typing import Awaitable, Callable
 from uuid import uuid4
 
@@ -40,6 +41,63 @@ def _metric_path(request: Request) -> str:
     return request.url.path
 
 
+def _first_forwarded_value(value: str | None) -> str | None:
+    if value is None:
+        return None
+    for part in value.split(","):
+        item = part.strip()
+        if item:
+            return item
+    return None
+
+
+def _parse_forwarded_host(value: str) -> tuple[str, int | None]:
+    host = value.strip()
+    if host.startswith("["):
+        end = host.find("]")
+        if end != -1:
+            host_value = host[1:end]
+            rest = host[end + 1 :]
+            if rest.startswith(":") and rest[1:].isdigit():
+                return host_value, int(rest[1:])
+            return host_value, None
+    if ":" in host:
+        host_value, port_value = host.rsplit(":", 1)
+        if port_value.isdigit():
+            return host_value, int(port_value)
+    return host, None
+
+
+def _is_trusted_proxy(client_host: str | None, trusted_proxies: tuple[str, ...]) -> bool:
+    if not client_host or not trusted_proxies:
+        return False
+    if "*" in trusted_proxies:
+        return True
+    if client_host in trusted_proxies:
+        return True
+    try:
+        address = ip_address(client_host)
+    except ValueError:
+        return False
+    for entry in trusted_proxies:
+        try:
+            network = ip_network(entry, strict=False)
+        except ValueError:
+            continue
+        if address in network:
+            return True
+    return False
+
+
+def _replace_host_header(
+    headers: list[tuple[bytes, bytes]],
+    host_value: str,
+) -> list[tuple[bytes, bytes]]:
+    updated = [(key, value) for key, value in headers if key != b"host"]
+    updated.append((b"host", host_value.encode("latin-1")))
+    return updated
+
+
 def create_app(
     config: Config | None = None,
     *,
@@ -65,6 +123,39 @@ def create_app(
     else:
         app.state.db_engine = None
         app.state.db_session_factory = db_session_factory
+
+    @app.middleware("http")
+    async def proxy_headers_middleware(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        client_host = request.client.host if request.client else None
+        if _is_trusted_proxy(client_host, resolved.app.trusted_proxy_ips):
+            forwarded_proto = _first_forwarded_value(
+                request.headers.get("x-forwarded-proto")
+            )
+            if forwarded_proto:
+                normalized_proto = forwarded_proto.lower()
+                if normalized_proto in ("http", "https"):
+                    request.scope["scheme"] = normalized_proto
+            forwarded_host = _first_forwarded_value(
+                request.headers.get("x-forwarded-host")
+            )
+            if forwarded_host:
+                host_value, port_value = _parse_forwarded_host(forwarded_host)
+                if host_value:
+                    request.scope["headers"] = _replace_host_header(
+                        list(request.scope.get("headers", [])),
+                        forwarded_host,
+                    )
+                    if port_value is None:
+                        server = request.scope.get("server")
+                        if server is not None and len(server) > 1:
+                            port_value = server[1]
+                        else:
+                            port_value = 443 if request.scope.get("scheme") == "https" else 80
+                    request.scope["server"] = (host_value, port_value)
+        return await call_next(request)
 
     @app.middleware("http")
     async def request_logging_middleware(

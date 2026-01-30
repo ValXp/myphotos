@@ -11,6 +11,7 @@ DEFAULT_REDIS_URL = "redis://localhost:6379/0"
 DEFAULT_WEBAUTHN_RP_NAME = "myphotos"
 DEFAULT_SESSION_TTL_SECONDS = 60 * 60 * 24
 DEFAULT_SESSION_COOKIE_NAME = "myphotos_session"
+DEFAULT_TRUSTED_PROXY_IPS: tuple[str, ...] = ()
 
 
 class ConfigError(ValueError):
@@ -48,6 +49,7 @@ class AppConfig:
     host: str
     port: int
     log_level: str
+    trusted_proxy_ips: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -85,6 +87,7 @@ class Config:
                 "host": self.app.host,
                 "port": self.app.port,
                 "log_level": self.app.log_level,
+                "trusted_proxy_ips": list(self.app.trusted_proxy_ips),
             },
             "session": {
                 "ttl_seconds": self.session.ttl_seconds,
@@ -117,6 +120,9 @@ def load_config(environ: Mapping[str, str] | None = None) -> Config:
         host=_str_from_env(env, "APP_HOST", "127.0.0.1"),
         port=_int_from_env(env, "APP_PORT", 8000, min_value=1, max_value=65535),
         log_level=_str_from_env(env, "APP_LOG_LEVEL", "INFO"),
+        trusted_proxy_ips=tuple(
+            _csv_from_env(env, "TRUSTED_PROXY_IPS", DEFAULT_TRUSTED_PROXY_IPS)
+        ),
     )
     default_origin = f"http://{app.host}:{app.port}"
     webauthn = WebAuthnConfig(
