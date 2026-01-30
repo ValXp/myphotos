@@ -8,17 +8,23 @@
 - Infinite scroll timeline, newest to oldest.
 - Album list view (owner); public viewers only see the album the link points to.
 - No in-app edits.
+- Owner access via passkeys (WebAuthn).
 
 ## Media Support
 - Support all modern image and video formats.
 - Live Photos (iOS + Android style) supported as paired assets.
 - Preserve and display EXIF/metadata including location.
-- Metadata filtering (MVP): date range + location.
+- Metadata filtering (MVP): date range + location (lat/long only for now).
 
 ## Performance
 - Precomputed thumbnails for fast grids.
 - Pre-transcoded multi-quality videos with adaptive streaming.
 - Originals are read-only and untouched; derived assets stored separately.
+
+## Quality
+- Test-driven development (TDD): write unit tests before implementation.
+- Strong unit test coverage across core logic (90%+).
+- Integration tests for APIs and critical pipelines (indexing, transcode, downloads) required per major feature.
 
 ## Ingest
 - Background indexing via folder monitoring.
