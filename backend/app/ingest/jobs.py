@@ -4,12 +4,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.enums import AssetType, JobType
 from app.db.models import Asset
 from app.ingest.reconcile import ReconcileStats, reconcile_events
 from app.ingest.scan import AssetUpsert, FullScanJob, ScanStats, upsert_asset
+from app.ingest.live_photos import link_live_photo_pairs
 from app.ingest.watcher import WatchEvent, WatchEventKind
 from app.queue import Job, Queue
 
@@ -71,7 +73,10 @@ def enqueue_scan_jobs(
         enqueue_for_change(queue, AssetChange(upsert.asset, upsert.created, upsert.updated))
 
     job = FullScanJob(roots, follow_symlinks=follow_symlinks, on_change=on_change)
-    return job.run(session)
+    stats = job.run(session)
+    if _enqueue_live_photo_links(session, queue):
+        session.commit()
+    return stats
 
 
 def apply_watch_events(
@@ -99,4 +104,22 @@ def apply_watch_events(
     if reconcile_events_list:
         stats.reconciled = reconcile_events(session, reconcile_events_list)
 
+    stats.enqueued += _enqueue_live_photo_links(session, queue)
+
     return stats
+
+
+def _enqueue_live_photo_links(session: Session, queue: Queue) -> int:
+    assets = session.execute(select(Asset)).scalars().all()
+    assets = [asset for asset in assets if asset not in session.deleted]
+    links = link_live_photo_pairs(session, assets=assets)
+    enqueued = 0
+    for link in links:
+        still = session.get(Asset, link.still_id)
+        if still is None:
+            continue
+        jobs = jobs_for_asset(still)
+        for job in jobs:
+            queue.enqueue(job)
+        enqueued += len(jobs)
+    return enqueued

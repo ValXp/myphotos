@@ -20,7 +20,7 @@ from app.ingest.jobs import (
     jobs_for_asset,
 )
 from app.ingest.watcher import WatchEvent, WatchEventKind
-from app.queue import InMemoryQueueBackend, Queue
+from app.queue import InMemoryQueueBackend, Job, Queue
 
 
 def _create_session():
@@ -40,6 +40,16 @@ def _drain_queue(queue: Queue) -> list[str]:
             break
         names.append(job.name)
     return names
+
+
+def _drain_jobs(queue: Queue) -> list[Job]:
+    jobs: list[Job] = []
+    while True:
+        job = queue.dequeue()
+        if job is None:
+            break
+        jobs.append(job)
+    return jobs
 
 
 class IngestJobsTest(unittest.TestCase):
@@ -133,6 +143,70 @@ class IngestJobsTest(unittest.TestCase):
                 self.assertEqual(names, [METADATA_JOB_NAME, THUMB_JOB_NAME])
                 self.assertEqual(stats.added, 1)
                 self.assertEqual(stats.enqueued, 2)
+        finally:
+            session.close()
+            engine.dispose()
+
+    def test_scan_links_live_photo_and_enqueues_transcode(self) -> None:
+        session, engine = _create_session()
+        try:
+            with TemporaryDirectory() as tmpdir:
+                root = Path(tmpdir)
+                still_path = root / "IMG_1234.jpg"
+                video_path = root / "IMG_1234.mov"
+                still_path.write_bytes(b"still")
+                video_path.write_bytes(b"video")
+
+                queue = Queue(InMemoryQueueBackend())
+                enqueue_scan_jobs(session, [root], queue)
+
+                assets = session.query(Asset).all()
+                still = next(asset for asset in assets if asset.original_path.endswith("IMG_1234.jpg"))
+                video = next(asset for asset in assets if asset.original_path.endswith("IMG_1234.mov"))
+
+                self.assertEqual(still.type, AssetType.live_photo)
+                self.assertEqual(still.live_photo_video_id, video.id)
+
+                jobs = _drain_jobs(queue)
+                transcodes = [job for job in jobs if job.name == TRANSCODE_JOB_NAME]
+                transcode_ids = {job.payload.get("asset_id") for job in transcodes}
+                self.assertEqual(transcode_ids, {still.id, video.id})
+        finally:
+            session.close()
+            engine.dispose()
+
+    def test_watch_add_links_live_photo_and_enqueues_transcode(self) -> None:
+        session, engine = _create_session()
+        try:
+            with TemporaryDirectory() as tmpdir:
+                root = Path(tmpdir)
+                still_path = root / "IMG_5678.jpg"
+                video_path = root / "IMG_5678.mov"
+                still_path.write_bytes(b"still")
+                video_path.write_bytes(b"video")
+
+                queue = Queue(InMemoryQueueBackend())
+                event = WatchEvent(
+                    kind=WatchEventKind.add,
+                    paths=(
+                        still_path.resolve(strict=False),
+                        video_path.resolve(strict=False),
+                    ),
+                )
+                stats = apply_watch_events(session, [event], queue)
+
+                assets = session.query(Asset).all()
+                still = next(asset for asset in assets if asset.original_path.endswith("IMG_5678.jpg"))
+                video = next(asset for asset in assets if asset.original_path.endswith("IMG_5678.mov"))
+
+                self.assertEqual(still.type, AssetType.live_photo)
+                self.assertEqual(still.live_photo_video_id, video.id)
+
+                jobs = _drain_jobs(queue)
+                transcodes = [job for job in jobs if job.name == TRANSCODE_JOB_NAME]
+                transcode_ids = {job.payload.get("asset_id") for job in transcodes}
+                self.assertEqual(transcode_ids, {still.id, video.id})
+                self.assertEqual(stats.enqueued, len(jobs))
         finally:
             session.close()
             engine.dispose()

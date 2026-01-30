@@ -79,3 +79,4 @@
 - 2026-01-30 05:38 MST - done - Add CI workflow and coverage gating
 - 2026-01-30 05:50 MST - done - Add integration test harness and CI job
 - 2026-01-30 08:30 MST - done - Normalize Postgres URLs for psycopg driver
+- 2026-01-30 08:34 MST - done - Link live photo ingest jobs
