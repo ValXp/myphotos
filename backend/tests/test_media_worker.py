@@ -54,6 +54,7 @@ def _test_config(root: Path) -> Config:
             port=8000,
             log_level="INFO",
             trusted_proxy_ips=(),
+            frontend_dist_dir=None,
         ),
         session=SessionConfig(
             ttl_seconds=3600,

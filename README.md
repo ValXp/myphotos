@@ -10,6 +10,7 @@ A self-hosted, Google Photos-like service for a single shared library (me + wife
 - Public album sharing via unguessable tokens and a dedicated share UI.
 - Adaptive video streaming (HLS) and Live Photo hover playback.
 - Precomputed thumbnails, metadata extraction, and derived media storage.
+- Background workers for indexing and media processing.
 - Structured JSON logging, request/job correlation IDs, and basic metrics.
 
 ## Architecture at a glance
@@ -18,6 +19,7 @@ A self-hosted, Google Photos-like service for a single shared library (me + wife
 - **Backend:** FastAPI + SQLAlchemy, WebAuthn auth, assets/albums APIs.
 - **Database:** Postgres for assets, albums, shares, jobs.
 - **Queue/Cache:** Redis for sessions, WebAuthn challenges, job queue.
+- **Workers:** Indexer runner and media worker for background processing.
 - **Media tools:** ffmpeg/ffprobe, exiftool, libvips (plus libheif for HEIC/HEIF).
 - **Storage:**
   - Originals (read-only): source folders
@@ -88,6 +90,31 @@ If the API is not on the same origin, set `VITE_API_BASE_URL`:
 VITE_API_BASE_URL=http://localhost:8000 npm run dev
 ```
 
+### Serve the frontend from the API (optional)
+
+```bash
+cd frontend
+npm run build
+cd ../backend
+FRONTEND_DIST_DIR=../frontend/dist uvicorn app.api.app:app --host 0.0.0.0 --port 8000
+```
+
+### Workers
+
+Indexer runner (watches for file changes and enqueues ingest jobs):
+
+```bash
+cd backend
+python -m workers.indexer
+```
+
+Media worker (processes metadata/thumbnail/transcode jobs):
+
+```bash
+cd backend
+python -m workers.media_worker
+```
+
 ### WebAuthn / passkey notes
 
 Passkeys require HTTPS (or `localhost`). In production, terminate TLS in a reverse proxy (e.g., nginx) and set `WEBAUTHN_RP_ID` + `WEBAUTHN_ORIGINS` to match the public domain. `APP_ENV=production` enables secure session cookies.
@@ -100,12 +127,14 @@ Backend config is environment-driven (see `backend/app/config.py`). Defaults sho
 - `ORIGINALS_DIR` (`DATA_ROOT/originals`) Source media (read-only).
 - `DERIVED_DIR` (`DATA_ROOT/derived`) Thumbnails, transcodes, manifests.
 - `TEMP_DIR` (`DATA_ROOT/temp`) Temporary ZIP staging.
-- `DB_URL` (`postgresql+psycopg://myphotos:myphotos@localhost:5432/myphotos`)
+- `DB_URL` (`postgresql://myphotos:myphotos@localhost:5432/myphotos`)
 - `REDIS_URL` (`redis://localhost:6379/0`)
 - `APP_ENV` (`development`)
 - `APP_HOST` (`127.0.0.1`)
 - `APP_PORT` (`8000`)
 - `APP_LOG_LEVEL` (`INFO`)
+- `TRUSTED_PROXY_IPS` (comma-separated list, empty = none)
+- `FRONTEND_DIST_DIR` (optional path to a built frontend bundle)
 - `WEBAUTHN_RP_ID` (`APP_HOST`)
 - `WEBAUTHN_RP_NAME` (`myphotos`)
 - `WEBAUTHN_ORIGINS` (`http://{APP_HOST}:{APP_PORT}`)
@@ -157,20 +186,22 @@ Core endpoints (owner-authenticated unless noted):
   - `POST /albums`
   - `PATCH /albums/{id}`
   - `DELETE /albums/{id}`
-  - `GET /albums/{id}/assets`
-  - `POST /albums/{id}/items`
-  - `DELETE /albums/{id}/items`
-  - `POST /albums/{id}/shares`
-  - `DELETE /albums/{id}/shares/{share_id}`
+- `GET /albums/{id}/assets`
+- `POST /albums/{id}/items`
+- `DELETE /albums/{id}/items`
+- `GET /albums/{id}/shares`
+- `POST /albums/{id}/shares`
+- `DELETE /albums/{id}/shares/{share_id}`
 
 - **Public share**
   - `GET /public/shares/{token}/album`
-  - `GET /public/shares/{token}/assets`
-  - `GET /public/shares/{token}/assets/{id}/thumb`
-  - `GET /public/shares/{token}/assets/{id}/stream`
-  - `POST /public/shares/{token}/zip`
-  - `GET /public/shares/{token}/zip`
-  - `GET /public/shares/{token}/zip/download`
+- `GET /public/shares/{token}/assets`
+- `GET /public/shares/{token}/assets/{id}/thumb`
+- `GET /public/shares/{token}/assets/{id}/original`
+- `GET /public/shares/{token}/assets/{id}/stream`
+- `POST /public/shares/{token}/zip`
+- `GET /public/shares/{token}/zip`
+- `GET /public/shares/{token}/zip/download`
 
 - **Downloads (owner)**
   - `POST /albums/{id}/zip`
@@ -198,7 +229,8 @@ Core endpoints (owner-authenticated unless noted):
    - `transcode`: ffmpeg HLS renditions + master manifest.
    - `live`: ffmpeg-derived silent Live Photo preview.
 
-There is no standalone worker binary yet. The queue primitives are in
+Workers live in `backend/workers/` and can be run via `python -m workers.indexer`
+and `python -m workers.media_worker`. Queue primitives are in
 `backend/app/queue.py` and job handlers live in `backend/app/media/*`.
 
 ## Testing
@@ -246,4 +278,6 @@ Start with:
 
 ## Project status
 
-Core backend APIs, media pipeline primitives, and the owner/public UI are in place. Remaining work is primarily around operational glue (worker runner, deploy wiring, and serving the frontend bundle from the API or proxy).
+Core backend APIs, worker runners, and the owner/public UI are in place. Remaining
+work is primarily around deploy wiring, scaling ingest/processing, and
+operational hardening.

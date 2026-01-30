@@ -61,3 +61,5 @@
 - 2026-01-30 09:14 MST: Frontend dist assets use /assets; serve static files before routing to avoid API path conflicts and fallback to index for SPA routes.
 - 2026-01-30 09:26 MST: Vitest/jsdom defaults window.location.origin to http://localhost:3000; use window.location.origin when asserting share URLs.
 - 2026-01-30 09:35 MST: Frontend vitest runs still emit React Router v7 future-flag warnings.
+
+- 2026-01-30 09:40 MST: Media worker tests need AppConfig.frontend_dist_dir set (use None) now that frontend_dist_dir is required.

@@ -90,3 +90,5 @@
 - 2026-01-30 09:27 MST - done - Add share listing endpoint and album share management UI
 - 2026-01-30 09:35 MST - done - Add public original download endpoint and UI
 - 2026-01-30 09:37 MST - done - Use originals for owner photo viewer
+
+- 2026-01-30 09:40 MST - done - Update README and fix media worker test config
