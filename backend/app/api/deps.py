@@ -6,7 +6,7 @@ from fastapi import Request
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.auth.sessions import SessionStore
-from app.auth.webauthn import RegistrationChallengeStore
+from app.auth.webauthn import LoginChallengeStore, RegistrationChallengeStore
 from app.config import Config
 from app.db.session import create_engine_from_config, create_session_factory
 
@@ -21,6 +21,10 @@ def get_session_store(request: Request) -> SessionStore:
 
 def get_registration_store(request: Request) -> RegistrationChallengeStore:
     return request.app.state.registration_store
+
+
+def get_login_store(request: Request) -> LoginChallengeStore:
+    return request.app.state.login_store
 
 
 def get_db(request: Request) -> Generator[Session, None, None]:

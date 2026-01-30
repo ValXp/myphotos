@@ -12,12 +12,23 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_config, get_db, get_registration_store, get_session_store
+from app.api.deps import (
+    get_config,
+    get_db,
+    get_login_store,
+    get_registration_store,
+    get_session_store,
+)
 from app.auth.sessions import SessionStore
 from app.auth.webauthn import (
+    DEFAULT_LOGIN_CHALLENGE_TTL_SECONDS,
+    DEFAULT_LOGIN_SESSION_COOKIE_NAME,
+    DEFAULT_LOGIN_TIMEOUT_MS,
     DEFAULT_REGISTRATION_CHALLENGE_TTL_SECONDS,
     DEFAULT_REGISTRATION_SESSION_COOKIE_NAME,
     DEFAULT_REGISTRATION_TIMEOUT_MS,
+    LoginChallenge,
+    LoginChallengeStore,
     RegistrationChallenge,
     RegistrationChallengeStore,
     generate_challenge,
@@ -86,6 +97,58 @@ def registration_options(
         "timeout": DEFAULT_REGISTRATION_TIMEOUT_MS,
         "attestation": "none",
         "excludeCredentials": [],
+    }
+
+
+@router.post("/login/options")
+def login_options(
+    response: Response,
+    request: Request,
+    config: Config = Depends(get_config),
+    store: LoginChallengeStore = Depends(get_login_store),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    user = db.execute(select(User).limit(1)).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=404, detail="owner not registered")
+
+    credentials = (
+        db.execute(select(PasskeyCredential).where(PasskeyCredential.user_id == user.id))
+        .scalars()
+        .all()
+    )
+    if not credentials:
+        raise HTTPException(status_code=404, detail="no passkeys registered")
+
+    session_id = request.cookies.get(DEFAULT_LOGIN_SESSION_COOKIE_NAME)
+    if session_id is None:
+        session_id = str(uuid.uuid4())
+
+    challenge = generate_challenge()
+    record = LoginChallenge(
+        challenge=challenge,
+        user_id=user.id,
+        created_at=datetime.now(timezone.utc),
+    )
+    store.save(session_id, record, ttl_seconds=DEFAULT_LOGIN_CHALLENGE_TTL_SECONDS)
+    _set_login_cookie(response, session_id, config)
+
+    allow_credentials: list[dict[str, Any]] = []
+    for credential in credentials:
+        item: dict[str, Any] = {
+            "type": "public-key",
+            "id": _base64url_encode_bytes(credential.credential_id),
+        }
+        if credential.transports:
+            item["transports"] = credential.transports
+        allow_credentials.append(item)
+
+    return {
+        "challenge": challenge,
+        "timeout": DEFAULT_LOGIN_TIMEOUT_MS,
+        "rpId": config.webauthn.rp_id,
+        "allowCredentials": allow_credentials,
+        "userVerification": "preferred",
     }
 
 
@@ -168,6 +231,22 @@ def _set_registration_cookie(response: Response, session_id: str, config: Config
         samesite="lax",
         secure=secure_cookie,
     )
+
+
+def _set_login_cookie(response: Response, session_id: str, config: Config) -> None:
+    secure_cookie = config.app.env.lower() == "production"
+    response.set_cookie(
+        key=DEFAULT_LOGIN_SESSION_COOKIE_NAME,
+        value=session_id,
+        max_age=DEFAULT_LOGIN_CHALLENGE_TTL_SECONDS,
+        httponly=True,
+        samesite="lax",
+        secure=secure_cookie,
+    )
+
+
+def _base64url_encode_bytes(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
 
 
 def _base64url_decode(value: str) -> bytes:

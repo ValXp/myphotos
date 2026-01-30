@@ -26,3 +26,4 @@
 - 2026-01-29 23:32 MST - done - Add WebAuthn registration options endpoint
 
 - 2026-01-29 23:41 MST - done - Add WebAuthn registration verification endpoint
+- 2026-01-29 23:47 MST - done - Add WebAuthn login options endpoint

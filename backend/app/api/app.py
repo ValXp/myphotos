@@ -4,7 +4,12 @@ from fastapi import FastAPI
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.auth.sessions import SessionStore, create_session_store
-from app.auth.webauthn import RegistrationChallengeStore, create_registration_store
+from app.auth.webauthn import (
+    LoginChallengeStore,
+    RegistrationChallengeStore,
+    create_login_store,
+    create_registration_store,
+)
 from app.api.health import router as health_router
 from app.api.webauthn import router as webauthn_router
 from app.config import Config, load_config
@@ -15,6 +20,7 @@ def create_app(
     *,
     session_store: SessionStore | None = None,
     registration_store: RegistrationChallengeStore | None = None,
+    login_store: LoginChallengeStore | None = None,
     db_session_factory: sessionmaker[Session] | None = None,
 ) -> FastAPI:
     resolved = load_config() if config is None else config
@@ -22,6 +28,7 @@ def create_app(
     app.state.config = resolved
     app.state.session_store = session_store or create_session_store(resolved)
     app.state.registration_store = registration_store or create_registration_store(resolved)
+    app.state.login_store = login_store or create_login_store(resolved)
     if db_session_factory is None:
         app.state.db_engine = None
         app.state.db_session_factory = None
