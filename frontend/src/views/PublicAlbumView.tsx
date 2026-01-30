@@ -245,6 +245,12 @@ function thumbnailUrl(token: string, assetId: string): string {
   );
 }
 
+function originalDownloadUrl(token: string, assetId: string): string {
+  const safeToken = encodeURIComponent(token);
+  const safeId = encodeURIComponent(assetId);
+  return buildApiUrl(`/public/shares/${safeToken}/assets/${safeId}/original`);
+}
+
 function viewerLink(token: string, assetId: string): string {
   const safeToken = encodeURIComponent(token);
   const safeId = encodeURIComponent(assetId);
@@ -509,6 +515,7 @@ export function PublicAlbumView() {
             );
             const typeLabel = formatTypeLabel(asset.type);
             const thumbAlt = `${typeLabel} thumbnail from ${dateLabel}`;
+            const downloadUrl = token ? originalDownloadUrl(token, asset.id) : "";
 
             return (
               <article
@@ -532,6 +539,16 @@ export function PublicAlbumView() {
                 <div className="media-meta">
                   <h3>{dateLabel}</h3>
                   {metaParts.length > 0 && <p>{metaParts.join(" · ")}</p>}
+                </div>
+                <div className="media-actions">
+                  <a
+                    className="ghost"
+                    href={downloadUrl}
+                    download
+                    aria-label={`Download original ${typeLabel} from ${dateLabel}`}
+                  >
+                    Download original
+                  </a>
                 </div>
               </article>
             );

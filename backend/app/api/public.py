@@ -7,10 +7,12 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.assets import (
+    ORIGINAL_CACHE_CONTROL,
     STREAM_CACHE_CONTROL,
     THUMB_CACHE_CONTROL,
     _build_file_response,
     _guess_media_type,
+    _resolve_original_path,
     _resolve_stream_path,
     _resolve_variant_path,
     _select_thumbnail_variant,
@@ -173,6 +175,33 @@ def get_public_asset_stream(
         cache_control=STREAM_CACHE_CONTROL,
         enable_range=True,
         missing_detail="stream not found",
+    )
+
+
+@router.get("/{token}/assets/{asset_id}/original")
+def get_public_asset_original(
+    asset_id: str,
+    request: Request,
+    share: ShareLink = Depends(require_share_link),
+    db: Session = Depends(get_db),
+    config: Config = Depends(get_config),
+) -> Response:
+    asset = (
+        db.query(Asset)
+        .join(AlbumItem, AlbumItem.asset_id == Asset.id)
+        .filter(AlbumItem.album_id == share.album_id, Asset.id == asset_id)
+        .one_or_none()
+    )
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    path = _resolve_original_path(asset.original_path, config.paths.originals)
+    return _build_file_response(
+        path,
+        request,
+        media_type=asset.original_mime,
+        cache_control=ORIGINAL_CACHE_CONTROL,
+        enable_range=True,
+        missing_detail="original not found",
     )
 
 

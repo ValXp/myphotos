@@ -135,6 +135,11 @@ describe("App flows", () => {
     expect(
       await screen.findByRole("button", { name: /prepare zip/i })
     ).toBeInTheDocument();
+    const downloadLink = await screen.findByRole("link", { name: /download original/i });
+    expect(downloadLink).toHaveAttribute(
+      "href",
+      expect.stringContaining("/public/shares/demo-token/assets/asset-public-1/original")
+    );
     expect(screen.queryByText(/unlock your library/i)).not.toBeInTheDocument();
   });
 

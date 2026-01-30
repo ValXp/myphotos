@@ -424,6 +424,18 @@ button {
   color: var(--muted);
 }
 
+.media-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.media-actions .ghost {
+  padding: 8px 14px;
+  font-size: 0.85rem;
+}
+
 .viewer {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
