@@ -39,3 +39,4 @@
 - 2026-01-30 00:49 MST - done - Add ingest flow integration tests
 - 2026-01-30 00:52 MST - done - Add variant profiles and derived mapping
 - 2026-01-30 01:06 MST - done - Add metadata extraction job and tests
+- 2026-01-30 01:17 MST - done - Add thumbnail job and tests
