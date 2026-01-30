@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.auth.sessions import Session, SessionStore
 from app.auth.webauthn import LoginChallengeStore, RegistrationChallengeStore
 from app.config import Config
+from app.db.models import ShareLink
 from app.db.session import create_engine_from_config, create_session_factory
 from app.ingest.admin import ScanBackoffPolicy
 from app.queue import Queue
@@ -41,14 +42,6 @@ def get_owner_session(request: Request) -> Session | None:
     return getattr(request.state, "owner_session", None)
 
 
-def require_owner_session(
-    owner_session: Session | None = Depends(get_owner_session),
-) -> Session:
-    if owner_session is None:
-        raise HTTPException(status_code=401, detail="owner session required")
-    return owner_session
-
-
 def get_db(request: Request) -> Generator[Session, None, None]:
     session_factory: sessionmaker[Session] | None = request.app.state.db_session_factory
     if session_factory is None:
@@ -61,3 +54,29 @@ def get_db(request: Request) -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
+
+
+def require_owner_session(
+    owner_session: Session | None = Depends(get_owner_session),
+) -> Session:
+    if owner_session is None:
+        raise HTTPException(status_code=401, detail="owner session required")
+    return owner_session
+
+
+def require_share_link(
+    token: str,
+    db: Session = Depends(get_db),
+) -> ShareLink:
+    token = token.strip()
+    if not token:
+        raise HTTPException(status_code=404, detail="share not found")
+    share = (
+        db.query(ShareLink)
+        .filter(ShareLink.token == token)
+        .filter(ShareLink.revoked_at.is_(None))
+        .one_or_none()
+    )
+    if share is None:
+        raise HTTPException(status_code=404, detail="share not found")
+    return share

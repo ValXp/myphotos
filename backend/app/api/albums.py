@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import secrets
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy import func
@@ -8,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, require_owner_session
 from app.auth.sessions import Session as OwnerSession
-from app.db.models import Album, AlbumItem, Asset
+from app.db.models import Album, AlbumItem, Asset, ShareLink
 
 router = APIRouter(prefix="/albums")
 
@@ -158,6 +159,45 @@ def remove_album_items(
     return {"removed": removed_ids, "missing": missing_ids, "item_count": item_count}
 
 
+@router.post("/{album_id}/shares")
+def create_share_link(
+    album_id: str,
+    db: Session = Depends(get_db),
+    _: OwnerSession = Depends(require_owner_session),
+) -> dict[str, object]:
+    album = db.query(Album).filter(Album.id == album_id).one_or_none()
+    if album is None:
+        raise HTTPException(status_code=404, detail="album not found")
+    token = _generate_share_token(db)
+    share = ShareLink(album_id=album_id, token=token)
+    db.add(share)
+    db.commit()
+    db.refresh(share)
+    return _serialize_share_link(share)
+
+
+@router.delete("/{album_id}/shares/{share_id}")
+def revoke_share_link(
+    album_id: str,
+    share_id: str,
+    db: Session = Depends(get_db),
+    _: OwnerSession = Depends(require_owner_session),
+) -> dict[str, object]:
+    share = (
+        db.query(ShareLink)
+        .filter(ShareLink.id == share_id)
+        .filter(ShareLink.album_id == album_id)
+        .one_or_none()
+    )
+    if share is None:
+        raise HTTPException(status_code=404, detail="share not found")
+    if share.revoked_at is None:
+        share.revoked_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(share)
+    return _serialize_share_link(share)
+
+
 def _serialize_album(album: Album, item_count: int) -> dict[str, object]:
     return {
         "id": album.id,
@@ -165,6 +205,16 @@ def _serialize_album(album: Album, item_count: int) -> dict[str, object]:
         "created_at": _isoformat(album.created_at),
         "updated_at": _isoformat(album.updated_at),
         "item_count": item_count,
+    }
+
+
+def _serialize_share_link(share: ShareLink) -> dict[str, object]:
+    return {
+        "id": share.id,
+        "album_id": share.album_id,
+        "token": share.token,
+        "created_at": _isoformat(share.created_at),
+        "revoked_at": _isoformat(share.revoked_at),
     }
 
 
@@ -205,6 +255,19 @@ def _require_asset_ids(payload: dict[str, object]) -> list[str]:
     if not asset_ids:
         raise HTTPException(status_code=400, detail="asset_ids required")
     return asset_ids
+
+
+def _generate_share_token(db: Session) -> str:
+    for _ in range(5):
+        token = secrets.token_urlsafe(32)
+        exists = (
+            db.query(ShareLink.id)
+            .filter(ShareLink.token == token)
+            .first()
+        )
+        if exists is None:
+            return token
+    raise HTTPException(status_code=500, detail="share token generation failed")
 
 
 def _album_item_count(db: Session, album_id: str) -> int:

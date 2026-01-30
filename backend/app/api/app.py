@@ -18,6 +18,7 @@ from app.api.admin import router as admin_router
 from app.api.albums import router as albums_router
 from app.api.assets import router as assets_router
 from app.api.health import router as health_router
+from app.api.public import router as public_router
 from app.api.webauthn import router as webauthn_router
 from app.config import Config, load_config
 from app.queue import Queue, RedisQueueBackend, create_redis_client
@@ -68,6 +69,7 @@ def create_app(
     app.include_router(albums_router)
     app.include_router(assets_router)
     app.include_router(health_router)
+    app.include_router(public_router)
     app.include_router(webauthn_router)
     return app
 
