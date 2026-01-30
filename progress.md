@@ -92,3 +92,5 @@
 - 2026-01-30 09:37 MST - done - Use originals for owner photo viewer
 
 - 2026-01-30 09:40 MST - done - Update README and fix media worker test config
+
+- 2026-01-30 09:41 MST - done - Add stop.md for completed tasks
