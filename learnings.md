@@ -48,3 +48,4 @@
 - 2026-01-30 04:53 MST: MemoryRouter initialEntries are only applied on mount; use cleanup/new render (or a keyed router) to change routes in tests.
 - 2026-01-30 05:07 MST: Public share ZIP preparation/status endpoints are `/public/shares/{token}/zip`, returning a share-scoped download URL.
 - 2026-01-30 05:17 MST: Structured logging is JSON formatted with request/job correlation IDs (request IDs default to `X-Request-ID`).
+- 2026-01-30 05:24 MST: Readiness endpoint tests set `app.state.redis_client` to a FakeRedis to avoid needing a real Redis server.

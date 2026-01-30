@@ -73,3 +73,4 @@
 - 2026-01-30 04:53 MST - done - Add public viewer playback support
 - 2026-01-30 05:08 MST - done - Add public ZIP download flow
 - 2026-01-30 05:17 MST - done - Add structured logging with correlation IDs
+- 2026-01-30 05:24 MST - done - Add readiness endpoint with dependency checks
