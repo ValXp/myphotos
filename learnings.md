@@ -27,3 +27,4 @@
 - 2026-01-29 23:41 MST: Avoid eager DB engine creation in app startup; default Postgres URL loads psycopg2 which is not installed in the venv, so create the engine lazily when a DB session is requested.
 
 - 2026-01-29 23:52 MST: FastAPI set-cookie headers render SameSite as lowercase (SameSite=lax); test cookie attribute checks should be case-insensitive.
+- 2026-01-30 00:08 MST: In-memory SQLite tests should dispose engines to avoid ResourceWarning messages.

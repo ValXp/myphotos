@@ -31,3 +31,4 @@
 - 2026-01-29 23:52 MST - done - Add WebAuthn login verification and session cookie
 - 2026-01-29 23:57 MST - done - Add logout endpoint and auth guard
 - 2026-01-30 00:02 MST - done - Add file type registry and Live Photo pairing
+- 2026-01-30 00:08 MST - done - Add full scan job and unit tests
