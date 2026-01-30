@@ -258,3 +258,34 @@
   - Library endpoints require an owner session.
   - Public endpoints remain limited to album-only data (no library exposure).
   - Integration tests cover unauthorized access to `/assets` endpoints.
+### Task 40: Album CRUD and item management
+- Scope: album CRUD endpoints and album item add/remove endpoints
+- Acceptance criteria:
+  - Implement owner album CRUD endpoints.
+  - Implement album item add/remove endpoints.
+  - Integration tests cover album CRUD and item management.
+### Task 41: Share link lifecycle and public token enforcement
+- Scope: share link creation/revocation and token-only access enforcement for public routes
+- Acceptance criteria:
+  - Implement share link creation and revocation endpoints.
+  - Public routes require a valid share token and revocation immediately blocks access.
+  - Share token access is limited to its album only.
+### Task 42: Public album endpoints and listing scope
+- Scope: public album endpoints with album-only asset listing
+- Acceptance criteria:
+  - Implement public album endpoints that return album metadata and asset listings.
+  - Public album listings include only assets in the shared album.
+  - Public endpoints do not expose private library data.
+  - Integration tests cover public album listing behavior.
+### Task 43: Album ZIP job creation and status
+- Scope: ZIP job creation and status endpoints
+- Acceptance criteria:
+  - Implement ZIP job creation endpoint for albums.
+  - Implement ZIP job status endpoint for albums.
+  - ZIP jobs generate archives from originals only.
+### Task 44: ZIP download streaming and cache invalidation
+- Scope: ZIP download streaming and album change invalidation
+- Acceptance criteria:
+  - Implement ZIP download streaming endpoint for albums.
+  - ZIP caches are invalidated when album contents change.
+  - Public album downloads work without exposing the private library.
