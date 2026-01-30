@@ -30,3 +30,4 @@
 - 2026-01-30 00:08 MST: In-memory SQLite tests should dispose engines to avoid ResourceWarning messages.
 - 2026-01-30 00:26 MST: Reconciliation relies on asset identity columns (original_device/original_inode/original_mtime_ns) populated during scans for move matching.
 - 2026-01-30 00:35 MST: Enqueueing jobs for newly created assets needs a session flush so the asset ID is available for job payloads before commit.
+- 2026-01-30 01:06 MST: exiftool, ffprobe, and ffmpeg are not installed in this environment; metadata integration tests were skipped.
