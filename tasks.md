@@ -289,3 +289,49 @@
   - Implement ZIP download streaming endpoint for albums.
   - ZIP caches are invalidated when album contents change.
   - Public album downloads work without exposing the private library.
+### Task 45: Owner app shell and auth gate
+- Scope: owner app shell, routing, and authenticated layout
+- Acceptance criteria:
+  - Implement the owner app shell with routes for timeline, albums, and viewer.
+  - Add an auth gate that protects owner routes and renders the authenticated layout.
+### Task 46: Passkey sign-in UI and session bootstrap
+- Scope: passkey sign-in flow and session bootstrap
+- Acceptance criteria:
+  - Implement passkey sign-in UI that calls the auth endpoints for registration/login.
+  - Successful sign-in boots the authenticated layout with the owner session.
+### Task 47: Timeline view with infinite scroll and thumbnails
+- Scope: timeline UI with infinite scroll and thumbnail loading
+- Acceptance criteria:
+  - Build a timeline view that loads assets with cursor pagination and infinite scroll.
+  - Timeline loads thumbnails without fetching originals.
+  - E2E or integration tests cover sign-in and basic browsing flows.
+### Task 48: Album list and album grid views
+- Scope: album list UI and album grid view
+- Acceptance criteria:
+  - Implement the album list view for owner albums.
+  - Implement the album grid view for a selected album.
+### Task 49: Multi-select and album add/remove actions
+- Scope: multi-select UI and album item actions
+- Acceptance criteria:
+  - Add multi-select support in timeline and album grids.
+  - Implement add/remove actions for album items.
+### Task 50: Viewer navigation and hover arrows
+- Scope: viewer navigation with prev/next and hover arrows
+- Acceptance criteria:
+  - Implement viewer navigation with prev/next and hover arrows.
+  - Viewer navigation works for photos, Live Photos, and videos.
+### Task 51: Viewer zoom and video playback
+- Scope: viewer zoom controls and video playback
+- Acceptance criteria:
+  - Implement zoom controls for images in the viewer.
+  - Implement video playback for video assets.
+### Task 52: Live Photo hover playback in grid
+- Scope: Live Photo hover playback and viewer hover disablement
+- Acceptance criteria:
+  - Add Live Photo hover playback (silent) in grid cards.
+  - Disable hover playback in the viewer.
+### Task 53: Date range and location filters
+- Scope: timeline filter UI for date range and location
+- Acceptance criteria:
+  - Add date range and location filters to the timeline UI.
+  - Filters update timeline results correctly.
