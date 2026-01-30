@@ -122,6 +122,103 @@ button {
   gap: 32px;
 }
 
+.public-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: linear-gradient(140deg, rgba(255, 255, 255, 0.7), rgba(31, 122, 122, 0.12));
+}
+
+.public-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px 48px;
+  background: rgba(255, 255, 255, 0.82);
+  border-bottom: 1px solid rgba(29, 28, 26, 0.08);
+}
+
+.public-brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.public-mark {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: conic-gradient(from 130deg, var(--accent-2), var(--accent-3), var(--accent));
+  box-shadow: var(--shadow);
+}
+
+.public-content {
+  padding: 40px 48px 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.public-page {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.public-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: center;
+  background: #fff;
+  border-radius: 24px;
+  padding: 32px;
+  box-shadow: var(--shadow);
+}
+
+.public-hero-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.public-token-card {
+  background: rgba(31, 122, 122, 0.08);
+  border-radius: 18px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.public-token-value {
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.public-panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 24px;
+}
+
+.public-panel {
+  background: #fff;
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.public-panel.accent {
+  background: linear-gradient(135deg, rgba(215, 102, 53, 0.15), rgba(227, 179, 65, 0.18));
+}
+
 .page {
   display: flex;
   flex-direction: column;
@@ -745,6 +842,20 @@ button:disabled {
 
   .content {
     padding: 24px;
+  }
+
+  .public-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 20px 24px;
+  }
+
+  .public-content {
+    padding: 24px;
+  }
+
+  .public-hero {
+    grid-template-columns: 1fr;
   }
 
   .page-header {

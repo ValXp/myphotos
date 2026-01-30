@@ -46,6 +46,20 @@ describe("App flows", () => {
     expect(await screen.findByText(/unlock your library/i)).toBeInTheDocument();
   });
 
+  it("renders public album routes without authentication", async () => {
+    mockedSessionStatus.mockResolvedValue(false);
+
+    render(
+      <MemoryRouter initialEntries={["/share/demo-token"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/public share/i)).toBeInTheDocument();
+    expect(screen.getByText(/demo-token/i)).toBeInTheDocument();
+    expect(screen.queryByText(/unlock your library/i)).not.toBeInTheDocument();
+  });
+
   it("renders timeline cards for authenticated owners", async () => {
     mockedSessionStatus.mockResolvedValue(true);
 

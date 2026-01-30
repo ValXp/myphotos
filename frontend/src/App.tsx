@@ -1,7 +1,8 @@
-import { NavLink, Navigate, Outlet, Route, Routes } from "react-router-dom";
+import { Link, NavLink, Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { AlbumDetailView } from "./views/AlbumDetailView";
 import { AlbumsView } from "./views/AlbumsView";
+import { PublicAlbumView } from "./views/PublicAlbumView";
 import { SignInView } from "./views/SignInView";
 import { TimelineView } from "./views/TimelineView";
 import { ViewerView } from "./views/ViewerView";
@@ -72,6 +73,28 @@ function OwnerLayout() {
   );
 }
 
+function PublicLayout() {
+  return (
+    <div className="public-shell">
+      <header className="public-bar">
+        <div className="public-brand">
+          <span className="public-mark" aria-hidden="true" />
+          <div>
+            <p className="eyebrow">MyPhotos share</p>
+            <h2>Public album</h2>
+          </div>
+        </div>
+        <Link className="ghost" to="/app">
+          Owner sign-in
+        </Link>
+      </header>
+      <main className="public-content">
+        <Outlet />
+      </main>
+    </div>
+  );
+}
+
 function NotFound() {
   return (
     <section className="page">
@@ -94,6 +117,9 @@ export default function App() {
             <Route path="albums/:albumId" element={<AlbumDetailView />} />
             <Route path="viewer" element={<ViewerView />} />
           </Route>
+        </Route>
+        <Route path="/share/:token" element={<PublicLayout />}>
+          <Route index element={<PublicAlbumView />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>
