@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { useAuth } from "../auth/AuthContext";
+import { useParams } from "react-router-dom";
 import { ViewerShell, ViewerAsset, ViewerStatus } from "./ViewerShell";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
-const PAGE_SIZE = 200;
 
 class ApiError extends Error {
   status: number;
@@ -14,9 +13,8 @@ class ApiError extends Error {
   }
 }
 
-type AssetsResponse = {
+type PublicAssetsResponse = {
   items: ViewerAsset[];
-  next_cursor: string | null;
 };
 
 function buildApiUrl(path: string): string {
@@ -33,8 +31,7 @@ async function requestJson<T>(path: string, options: RequestInit = {}): Promise<
   }
   const response = await fetch(buildApiUrl(path), {
     ...options,
-    headers,
-    credentials: "include"
+    headers
   });
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`.trim();
@@ -51,60 +48,77 @@ async function requestJson<T>(path: string, options: RequestInit = {}): Promise<
   return (await response.json()) as T;
 }
 
-function previewUrl(assetId: string): string {
-  return buildApiUrl(`/assets/${assetId}/thumb`);
+function publicThumbnailUrl(token: string, assetId: string): string {
+  const safeToken = encodeURIComponent(token);
+  const safeId = encodeURIComponent(assetId);
+  return buildApiUrl(`/public/shares/${safeToken}/assets/${safeId}/thumb`);
 }
 
-function streamUrl(assetId: string): string {
-  return buildApiUrl(`/assets/${assetId}/stream`);
+function publicStreamUrl(token: string, assetId: string): string {
+  const safeToken = encodeURIComponent(token);
+  const safeId = encodeURIComponent(assetId);
+  return buildApiUrl(`/public/shares/${safeToken}/assets/${safeId}/stream`);
 }
 
-async function fetchAssets(): Promise<AssetsResponse> {
-  const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
-  return requestJson<AssetsResponse>(`/assets?${params.toString()}`, { method: "GET" });
-}
-
-export function ViewerView() {
-  const { refreshSession } = useAuth();
+export function PublicViewerView() {
+  const { token } = useParams();
   const [items, setItems] = useState<ViewerAsset[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [status, setStatus] = useState<ViewerStatus>("idle");
   const [error, setError] = useState<string | null>(null);
 
   const loadAssets = useCallback(async () => {
+    if (!token) {
+      setStatus("error");
+      setError("Share link missing.");
+      return;
+    }
     setStatus("loading");
     setError(null);
     try {
-      const data = await fetchAssets();
+      const safeToken = encodeURIComponent(token);
+      const data = await requestJson<PublicAssetsResponse>(
+        `/public/shares/${safeToken}/assets`,
+        { method: "GET" }
+      );
       setItems(data.items);
-      setNextCursor(data.next_cursor ?? null);
       setStatus("ready");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to load assets.";
+      const message = err instanceof Error ? err.message : "Unable to load shared assets.";
       setError(message);
       setStatus("error");
-      if (err instanceof ApiError && err.status === 401) {
-        await refreshSession();
-      }
     }
-  }, [refreshSession]);
+  }, [token]);
 
   useEffect(() => {
     void loadAssets();
   }, [loadAssets]);
 
+  const thumbBuilder = useCallback(
+    (assetId: string) => (token ? publicThumbnailUrl(token, assetId) : ""),
+    [token]
+  );
+
+  const streamBuilder = useCallback(
+    (assetId: string) => (token ? publicStreamUrl(token, assetId) : ""),
+    [token]
+  );
+
+  const backLink = token
+    ? { to: `/share/${encodeURIComponent(token)}`, label: "Back to album" }
+    : undefined;
+
   return (
     <ViewerShell
-      contextLabel="Owner viewer"
-      emptyMessage="No assets yet. Add photos or videos to start viewing."
-      emptySubhead="Pick an asset from the timeline."
+      contextLabel="Shared album viewer"
+      emptyMessage="This shared album does not have any items yet."
+      emptySubhead="Pick an asset from the shared album."
+      loadingMessage="Loading shared viewer..."
       items={items}
       status={status}
       error={error}
-      nextCursor={nextCursor}
-      previewUrl={previewUrl}
-      streamUrl={streamUrl}
-      backLink={{ to: "/app/timeline", label: "Back to timeline" }}
+      previewUrl={thumbBuilder}
+      streamUrl={streamBuilder}
+      backLink={backLink}
     />
   );
 }

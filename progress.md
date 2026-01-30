@@ -70,3 +70,4 @@
 
 - 2026-01-30 04:28 MST - done - Add public share routing and layout
 - 2026-01-30 04:38 MST - done - Add public album grid view
+- 2026-01-30 04:53 MST - done - Add public viewer playback support

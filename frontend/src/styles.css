@@ -309,6 +309,8 @@ button {
 
 .media-thumb {
   z-index: 0;
+  display: block;
+  text-decoration: none;
 }
 
 .media-select {

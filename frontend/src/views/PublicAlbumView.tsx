@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 const THUMB_PROFILE = "thumb_md";
@@ -174,6 +174,12 @@ function thumbnailUrl(token: string, assetId: string): string {
   );
 }
 
+function viewerLink(token: string, assetId: string): string {
+  const safeToken = encodeURIComponent(token);
+  const safeId = encodeURIComponent(assetId);
+  return `/share/${safeToken}/viewer?asset=${safeId}`;
+}
+
 export function PublicAlbumView() {
   const { token } = useParams();
   const tokenLabel = useMemo(() => formatToken(token), [token]);
@@ -274,7 +280,11 @@ export function PublicAlbumView() {
                 className="media-card album-media-card"
                 style={{ "--delay": `${index * 0.03}s` } as CSSProperties}
               >
-                <div className="media-thumb">
+                <Link
+                  className="media-thumb"
+                  to={token ? viewerLink(token, asset.id) : "#"}
+                  aria-label={`Open ${typeLabel} in viewer`}
+                >
                   <img
                     src={token ? thumbnailUrl(token, asset.id) : undefined}
                     alt={thumbAlt}
@@ -282,7 +292,7 @@ export function PublicAlbumView() {
                   />
                   <span className="media-badge">{typeLabel}</span>
                   {durationLabel && <span className="media-duration">{durationLabel}</span>}
-                </div>
+                </Link>
                 <div className="media-meta">
                   <h3>{dateLabel}</h3>
                   {metaParts.length > 0 && <p>{metaParts.join(" · ")}</p>}

@@ -113,6 +113,80 @@ describe("App flows", () => {
     expect(screen.queryByText(/unlock your library/i)).not.toBeInTheDocument();
   });
 
+  it("renders public viewer video playback and live photo preview", async () => {
+    mockedSessionStatus.mockResolvedValue(false);
+
+    const assetsPayload = {
+      items: [
+        {
+          id: "asset-public-video",
+          type: "video",
+          captured_at: "2026-01-20T16:30:00Z",
+          created_at: "2026-01-20T16:30:00Z",
+          duration_ms: 64000,
+          width: 1920,
+          height: 1080,
+          live_photo_video_id: null
+        },
+        {
+          id: "asset-public-live",
+          type: "live_photo",
+          captured_at: "2026-01-18T10:05:00Z",
+          created_at: "2026-01-18T10:05:00Z",
+          duration_ms: null,
+          width: 3024,
+          height: 4032,
+          live_photo_video_id: "asset-live-video"
+        }
+      ]
+    };
+
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.includes("/public/shares/demo-token/assets")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => assetsPayload
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({})
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { container } = render(
+      <MemoryRouter initialEntries={["/share/demo-token/viewer?asset=asset-public-video"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(
+      await screen.findByLabelText(/video playback from jan 20, 2026/i)
+    ).toBeInTheDocument();
+    expect(container.querySelector("video")).toBeInTheDocument();
+    expect(
+      container.querySelector("video")?.getAttribute("src")
+    ).toContain("/public/shares/demo-token/assets/asset-public-video/stream");
+
+    cleanup();
+
+    render(
+      <MemoryRouter initialEntries={["/share/demo-token/viewer?asset=asset-public-live"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(
+      await screen.findByRole("img", { name: /live photo preview from jan 18, 2026/i })
+    ).toBeInTheDocument();
+  });
+
   it("renders timeline cards for authenticated owners", async () => {
     mockedSessionStatus.mockResolvedValue(true);
 

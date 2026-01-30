@@ -7,14 +7,18 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.assets import (
+    STREAM_CACHE_CONTROL,
     THUMB_CACHE_CONTROL,
     _build_file_response,
     _guess_media_type,
+    _resolve_stream_path,
     _resolve_variant_path,
     _select_thumbnail_variant,
+    _stream_media_type,
 )
 from app.api.deps import get_config, get_db, require_share_link
 from app.config import Config
+from app.db.enums import AssetType
 from app.db.models import AlbumItem, Asset, ShareLink
 from app.downloads.zip_jobs import album_zip_path, album_zip_ready, album_zip_record
 
@@ -81,6 +85,37 @@ def get_public_asset_thumbnail(
         cache_control=THUMB_CACHE_CONTROL,
         enable_range=False,
         missing_detail="thumbnail not found",
+    )
+
+
+@router.get("/{token}/assets/{asset_id}/stream")
+def get_public_asset_stream(
+    asset_id: str,
+    request: Request,
+    file: str | None = None,
+    share: ShareLink = Depends(require_share_link),
+    db: Session = Depends(get_db),
+    config: Config = Depends(get_config),
+) -> Response:
+    asset = (
+        db.query(Asset)
+        .join(AlbumItem, AlbumItem.asset_id == Asset.id)
+        .filter(AlbumItem.album_id == share.album_id, Asset.id == asset_id)
+        .one_or_none()
+    )
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    if asset.type not in {AssetType.video, AssetType.live_photo}:
+        raise HTTPException(status_code=404, detail="stream not found")
+    stream_path = _resolve_stream_path(asset_id, config.paths.derived, file)
+    media_type = _stream_media_type(stream_path)
+    return _build_file_response(
+        stream_path,
+        request,
+        media_type=media_type,
+        cache_control=STREAM_CACHE_CONTROL,
+        enable_range=True,
+        missing_detail="stream not found",
     )
 
 

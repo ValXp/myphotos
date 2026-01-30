@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { AlbumDetailView } from "./views/AlbumDetailView";
 import { AlbumsView } from "./views/AlbumsView";
 import { PublicAlbumView } from "./views/PublicAlbumView";
+import { PublicViewerView } from "./views/PublicViewerView";
 import { SignInView } from "./views/SignInView";
 import { TimelineView } from "./views/TimelineView";
 import { ViewerView } from "./views/ViewerView";
@@ -120,6 +121,7 @@ export default function App() {
         </Route>
         <Route path="/share/:token" element={<PublicLayout />}>
           <Route index element={<PublicAlbumView />} />
+          <Route path="viewer" element={<PublicViewerView />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>
