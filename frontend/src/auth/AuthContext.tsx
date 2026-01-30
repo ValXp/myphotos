@@ -1,36 +1,50 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { fetchSessionStatus, logout } from "./webauthn";
 
 export type AuthStatus = "checking" | "authenticated" | "unauthenticated";
 
 interface AuthContextValue {
   status: AuthStatus;
-  signIn: () => void;
-  signOut: () => void;
+  completeSignIn: () => void;
+  signOut: () => Promise<void>;
+  refreshSession: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-const STORAGE_KEY = "myphotos_owner_session";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>("checking");
 
-  useEffect(() => {
-    const stored = sessionStorage.getItem(STORAGE_KEY);
-    setStatus(stored === "true" ? "authenticated" : "unauthenticated");
+  const refreshSession = useCallback(async () => {
+    try {
+      const hasSession = await fetchSessionStatus();
+      setStatus(hasSession ? "authenticated" : "unauthenticated");
+    } catch (error) {
+      console.warn("Session check failed.", error);
+      setStatus("unauthenticated");
+    }
   }, []);
 
-  const signIn = () => {
-    sessionStorage.setItem(STORAGE_KEY, "true");
+  useEffect(() => {
+    void refreshSession();
+  }, [refreshSession]);
+
+  const completeSignIn = () => {
     setStatus("authenticated");
   };
 
-  const signOut = () => {
-    sessionStorage.removeItem(STORAGE_KEY);
-    setStatus("unauthenticated");
-  };
+  const signOut = useCallback(async () => {
+    try {
+      await logout();
+    } catch (error) {
+      console.warn("Sign out failed.", error);
+    } finally {
+      setStatus("unauthenticated");
+    }
+  }, []);
 
   return (
-    <AuthContext.Provider value={{ status, signIn, signOut }}>
+    <AuthContext.Provider value={{ status, completeSignIn, signOut, refreshSession }}>
       {children}
     </AuthContext.Provider>
   );

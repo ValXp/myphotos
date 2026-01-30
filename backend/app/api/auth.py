@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request, Response
 
-from app.api.deps import get_config, get_session_store
-from app.auth.sessions import SessionStore
+from app.api.deps import get_config, get_session_store, require_owner_session
+from app.auth.sessions import Session as OwnerSession, SessionStore
 from app.config import Config
 
 router = APIRouter(prefix="/auth")
@@ -22,6 +22,13 @@ def logout(
 
     _clear_session_cookie(response, config)
     return {"status": "ok"}
+
+
+@router.get("/session")
+def session_status(
+    owner_session: OwnerSession = Depends(require_owner_session),
+) -> dict[str, str]:
+    return {"status": "ok", "user_id": owner_session.user_id}
 
 
 def _clear_session_cookie(response: Response, config: Config) -> None:

@@ -60,7 +60,7 @@ function OwnerLayout() {
             Viewer
           </NavLink>
         </nav>
-        <button className="ghost" onClick={signOut}>
+        <button className="ghost" onClick={() => void signOut()}>
           Sign out
         </button>
       </header>
