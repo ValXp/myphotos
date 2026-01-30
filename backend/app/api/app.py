@@ -15,6 +15,7 @@ from app.auth.webauthn import (
 from app.ingest.admin import ScanBackoffPolicy
 from app.api.auth import router as auth_router
 from app.api.admin import router as admin_router
+from app.api.assets import router as assets_router
 from app.api.health import router as health_router
 from app.api.webauthn import router as webauthn_router
 from app.config import Config, load_config
@@ -63,6 +64,7 @@ def create_app(
 
     app.include_router(auth_router)
     app.include_router(admin_router)
+    app.include_router(assets_router)
     app.include_router(health_router)
     app.include_router(webauthn_router)
     return app
