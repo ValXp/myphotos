@@ -71,6 +71,25 @@ class ShareLinkIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(blocked_response.status_code, 404)
 
+    def test_share_listing_requires_owner_session(self) -> None:
+        album_response = self.owner_client.post("/albums", json={"title": "Moments"})
+        self.assertEqual(album_response.status_code, 200)
+        album_id = album_response.json()["id"]
+
+        share_response = self.owner_client.post(f"/albums/{album_id}/shares")
+        self.assertEqual(share_response.status_code, 200)
+        share = share_response.json()
+
+        list_response = self.owner_client.get(f"/albums/{album_id}/shares")
+        self.assertEqual(list_response.status_code, 200)
+        items = list_response.json()["items"]
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["id"], share["id"])
+        self.assertEqual(items[0]["token"], share["token"])
+
+        public_response = self.public_client.get(f"/albums/{album_id}/shares")
+        self.assertEqual(public_response.status_code, 401)
+
     def test_share_token_scopes_to_album(self) -> None:
         album_a_response = self.owner_client.post("/albums", json={"title": "A"})
         self.assertEqual(album_a_response.status_code, 200)

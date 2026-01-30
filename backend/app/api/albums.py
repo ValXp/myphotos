@@ -207,6 +207,24 @@ def remove_album_items(
     return {"removed": removed_ids, "missing": missing_ids, "item_count": item_count}
 
 
+@router.get("/{album_id}/shares")
+def list_share_links(
+    album_id: str,
+    db: Session = Depends(get_db),
+    _: OwnerSession = Depends(require_owner_session),
+) -> dict[str, object]:
+    album = db.query(Album).filter(Album.id == album_id).one_or_none()
+    if album is None:
+        raise HTTPException(status_code=404, detail="album not found")
+    shares = (
+        db.query(ShareLink)
+        .filter(ShareLink.album_id == album_id)
+        .order_by(ShareLink.created_at.desc(), ShareLink.id.desc())
+        .all()
+    )
+    return {"items": [_serialize_share_link(share) for share in shares]}
+
+
 @router.post("/{album_id}/shares")
 def create_share_link(
     album_id: str,

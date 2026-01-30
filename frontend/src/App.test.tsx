@@ -562,4 +562,125 @@ describe("App flows", () => {
     expect(params.get("max_lat")).toBe("42");
     expect(params.get("max_lon")).toBe("-118");
   });
+
+  it("creates and revokes share links from album detail", async () => {
+    mockedSessionStatus.mockResolvedValue(true);
+
+    const albumPayload = {
+      id: "album-1",
+      title: "Road trip",
+      created_at: "2026-01-12T08:00:00Z",
+      updated_at: "2026-01-18T08:00:00Z",
+      item_count: 0
+    };
+
+    const assetsPayload = { items: [] };
+
+    let shareItems = [
+      {
+        id: "share-1",
+        album_id: "album-1",
+        token: "token-1",
+        created_at: "2026-01-18T12:00:00Z",
+        revoked_at: null
+      }
+    ];
+
+    const newShare = {
+      id: "share-2",
+      album_id: "album-1",
+      token: "token-2",
+      created_at: "2026-01-19T12:00:00Z",
+      revoked_at: null
+    };
+
+    const revokedShare = {
+      ...shareItems[0],
+      revoked_at: "2026-01-20T12:00:00Z"
+    };
+
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.url;
+      const method = init?.method ?? "GET";
+      if (url.includes("/albums/album-1/shares") && method === "GET") {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => ({ items: shareItems })
+        });
+      }
+      if (url.includes("/albums/album-1/shares") && method === "POST") {
+        shareItems = [newShare, ...shareItems];
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => newShare
+        });
+      }
+      if (url.includes("/albums/album-1/shares/share-1") && method === "DELETE") {
+        shareItems = shareItems.map((share) => (share.id === "share-1" ? revokedShare : share));
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => revokedShare
+        });
+      }
+      if (url.includes("/albums/album-1/assets")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => assetsPayload
+        });
+      }
+      if (url.includes("/albums/album-1")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => albumPayload
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({})
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/app/albums/album-1"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/manage access/i)).toBeInTheDocument();
+    expect(await screen.findByText(/token-1/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /new share link/i }));
+    expect(await screen.findByText(/token-2/i)).toBeInTheDocument();
+
+    const copyButtons = screen.getAllByRole("button", { name: /copy link/i });
+    fireEvent.click(copyButtons[0]);
+    const expectedUrl = `${window.location.origin}/share/token-2`;
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expectedUrl);
+    });
+
+    const revokeButtons = screen.getAllByRole("button", { name: /revoke/i });
+    fireEvent.click(revokeButtons[1]);
+
+    expect(await screen.findByText(/access revoked/i)).toBeInTheDocument();
+  });
 });

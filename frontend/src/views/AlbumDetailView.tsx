@@ -60,6 +60,18 @@ type AlbumItemsRemoveResponse = {
   item_count: number;
 };
 
+type ShareLink = {
+  id: string;
+  album_id: string;
+  token: string;
+  created_at: string | null;
+  revoked_at: string | null;
+};
+
+type ShareLinksResponse = {
+  items: ShareLink[];
+};
+
 function buildApiUrl(path: string): string {
   if (!API_BASE_URL) {
     return path;
@@ -109,6 +121,14 @@ function formatAlbumUpdated(album: AlbumSummary): string {
     return "Updated date unavailable";
   }
   return `Updated ${dateFormatter.format(date)}`;
+}
+
+function formatShareTimestamp(value: string | null): string | null {
+  const date = parseDate(value);
+  if (!date) {
+    return null;
+  }
+  return `${dateFormatter.format(date)} · ${timeFormatter.format(date)}`;
 }
 
 function formatItemCount(count: number): string {
@@ -174,6 +194,12 @@ function liveVideoUrl(assetId: string): string {
   return buildApiUrl(`/assets/${assetId}/live`);
 }
 
+function buildShareUrl(token: string): string {
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const base = origin ? origin.replace(/\/$/, "") : "";
+  return `${base}/share/${encodeURIComponent(token)}`;
+}
+
 export function AlbumDetailView() {
   const { albumId } = useParams();
   const { refreshSession } = useAuth();
@@ -185,6 +211,13 @@ export function AlbumDetailView() {
   const [actionStatus, setActionStatus] = useState<"idle" | "working" | "success" | "error">("idle");
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [isRemoving, setIsRemoving] = useState(false);
+  const [shareLinks, setShareLinks] = useState<ShareLink[]>([]);
+  const [shareStatus, setShareStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [shareError, setShareError] = useState<string | null>(null);
+  const [shareNotice, setShareNotice] = useState<string | null>(null);
+  const [isCreatingShare, setIsCreatingShare] = useState(false);
+  const [revokingShareIds, setRevokingShareIds] = useState<Set<string>>(() => new Set());
+  const [copiedShareId, setCopiedShareId] = useState<string | null>(null);
   const { registerVideoRef, handleMouseEnter, handleMouseLeave } = useLivePhotoHover();
 
   const loadAlbum = useCallback(async () => {
@@ -210,6 +243,110 @@ export function AlbumDetailView() {
       }
     }
   }, [albumId, refreshSession]);
+
+  const loadShareLinks = useCallback(async () => {
+    if (!albumId) {
+      return;
+    }
+    setShareStatus("loading");
+    setShareError(null);
+    try {
+      const data = await requestJson<ShareLinksResponse>(`/albums/${albumId}/shares`, {
+        method: "GET"
+      });
+      setShareLinks(data.items);
+      setShareStatus("ready");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to load share links.";
+      setShareError(message);
+      setShareStatus("error");
+      if (err instanceof ApiError && err.status === 401) {
+        await refreshSession();
+      }
+    }
+  }, [albumId, refreshSession]);
+
+  const handleCreateShare = useCallback(async () => {
+    if (!albumId) {
+      return;
+    }
+    setIsCreatingShare(true);
+    setShareError(null);
+    setShareNotice(null);
+    try {
+      const share = await requestJson<ShareLink>(`/albums/${albumId}/shares`, {
+        method: "POST"
+      });
+      setShareLinks((prev) => [share, ...prev]);
+      setShareStatus("ready");
+      setCopiedShareId(null);
+      setShareNotice("Share link created.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to create share link.";
+      setShareError(message);
+      if (err instanceof ApiError && err.status === 401) {
+        await refreshSession();
+      }
+    } finally {
+      setIsCreatingShare(false);
+    }
+  }, [albumId, refreshSession]);
+
+  const handleRevokeShare = useCallback(
+    async (shareId: string) => {
+      if (!albumId) {
+        return;
+      }
+      setRevokingShareIds((prev) => {
+        const next = new Set(prev);
+        next.add(shareId);
+        return next;
+      });
+      setShareError(null);
+      setShareNotice(null);
+      try {
+        const revoked = await requestJson<ShareLink>(
+          `/albums/${albumId}/shares/${shareId}`,
+          { method: "DELETE" }
+        );
+        setShareLinks((prev) =>
+          prev.map((link) => (link.id === shareId ? revoked : link))
+        );
+        setShareNotice("Share link revoked.");
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unable to revoke share link.";
+        setShareError(message);
+        if (err instanceof ApiError && err.status === 401) {
+          await refreshSession();
+        }
+      } finally {
+        setRevokingShareIds((prev) => {
+          const next = new Set(prev);
+          next.delete(shareId);
+          return next;
+        });
+      }
+    },
+    [albumId, refreshSession]
+  );
+
+  const handleCopyShare = useCallback(async (share: ShareLink) => {
+    const url = buildShareUrl(share.token);
+    setShareError(null);
+    setShareNotice(null);
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        window.prompt("Copy share link", url);
+      }
+      setCopiedShareId(share.id);
+      setShareNotice("Share link copied.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to copy share link.";
+      setShareError(message);
+    }
+  }, []);
 
   const toggleSelection = useCallback((assetId: string) => {
     setSelectedIds((prev) => {
@@ -292,9 +429,18 @@ export function AlbumDetailView() {
   }, [loadAlbum]);
 
   useEffect(() => {
+    void loadShareLinks();
+  }, [loadShareLinks]);
+
+  useEffect(() => {
     setSelectedIds(new Set());
     setActionStatus("idle");
     setActionMessage(null);
+    setShareLinks([]);
+    setShareStatus("idle");
+    setShareError(null);
+    setShareNotice(null);
+    setCopiedShareId(null);
   }, [albumId]);
 
   const hasItems = items.length > 0;
@@ -302,6 +448,10 @@ export function AlbumDetailView() {
   const selectedCount = selectedIds.size;
   const isActionError = actionStatus === "error";
   const isActionSuccess = actionStatus === "success";
+  const isShareLoading = shareStatus === "loading";
+  const hasShares = shareLinks.length > 0;
+  const activeShareCount = shareLinks.filter((link) => !link.revoked_at).length;
+  const revokedShareCount = shareLinks.length - activeShareCount;
 
   return (
     <section className="page">
@@ -339,6 +489,106 @@ export function AlbumDetailView() {
           </div>
         </div>
       </header>
+      <div className="share-section">
+        <div className="share-panel">
+          <p className="eyebrow">Share this album</p>
+          <h2>Invite others</h2>
+          <p className="subhead">
+            Create links that only expose this album. Revoke access anytime.
+          </p>
+          <div className="pill-group">
+            <span className="pill">{activeShareCount} active</span>
+            {revokedShareCount > 0 && (
+              <span className="pill">{revokedShareCount} revoked</span>
+            )}
+          </div>
+          <div className="share-actions">
+            <button
+              className="primary"
+              onClick={handleCreateShare}
+              disabled={!albumId || isCreatingShare}
+            >
+              {isCreatingShare ? "Creating..." : "New share link"}
+            </button>
+            <button
+              className="ghost"
+              onClick={() => void loadShareLinks()}
+              disabled={!albumId || isShareLoading}
+            >
+              Refresh links
+            </button>
+          </div>
+          {shareNotice && (
+            <div className="status success" role="status">
+              {shareNotice}
+            </div>
+          )}
+          {shareError && (
+            <div className="status error" role="alert">
+              {shareError}
+            </div>
+          )}
+        </div>
+        <div className="share-panel share-list">
+          <p className="eyebrow">Share links</p>
+          <h2>Manage access</h2>
+          {isShareLoading && !hasShares && (
+            <div className="status" role="status">
+              Loading share links...
+            </div>
+          )}
+          {!isShareLoading && !hasShares && (
+            <p className="hint">No share links yet. Create one to share this album.</p>
+          )}
+          {hasShares && (
+            <div className="share-links">
+              {shareLinks.map((share) => {
+                const createdLabel = formatShareTimestamp(share.created_at);
+                const revokedLabel = formatShareTimestamp(share.revoked_at);
+                const shareUrl = buildShareUrl(share.token);
+                const isRevoked = !!share.revoked_at;
+                const isRevoking = revokingShareIds.has(share.id);
+                const isCopied = copiedShareId === share.id;
+
+                return (
+                  <div
+                    key={share.id}
+                    className={`share-link-card${isRevoked ? " is-revoked" : ""}`}
+                  >
+                    <div className="share-link-meta">
+                      <p className="share-link-url">{shareUrl}</p>
+                      <div className="pill-group">
+                        <span className="pill">{isRevoked ? "Revoked" : "Active"}</span>
+                        {createdLabel && <span className="pill">Created {createdLabel}</span>}
+                        {revokedLabel && <span className="pill">Revoked {revokedLabel}</span>}
+                      </div>
+                    </div>
+                    <div className="share-link-actions">
+                      <button
+                        className="ghost"
+                        onClick={() => void handleCopyShare(share)}
+                        disabled={isRevoked}
+                      >
+                        {isCopied ? "Copied" : "Copy link"}
+                      </button>
+                      {!isRevoked && (
+                        <button
+                          className="danger"
+                          onClick={() => void handleRevokeShare(share.id)}
+                          disabled={isRevoking}
+                        >
+                          {isRevoking ? "Revoking..." : "Revoke"}
+                        </button>
+                      )}
+                      {isRevoked && <span className="hint">Access revoked</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
       {actionMessage && (
         <div
           className={`status${isActionError ? " error" : ""}${isActionSuccess ? " success" : ""}`}
