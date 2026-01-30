@@ -217,6 +217,88 @@ describe("App flows", () => {
     ).toBeInTheDocument();
   });
 
+  it("uses originals for owner photo viewer and keeps video posters as thumbnails", async () => {
+    mockedSessionStatus.mockResolvedValue(true);
+
+    const assetsPayload = {
+      items: [
+        {
+          id: "asset-owner-photo",
+          type: "photo",
+          captured_at: "2026-01-22T16:30:00Z",
+          created_at: "2026-01-22T16:30:00Z",
+          duration_ms: null,
+          width: 4032,
+          height: 3024,
+          live_photo_video_id: null
+        },
+        {
+          id: "asset-owner-video",
+          type: "video",
+          captured_at: "2026-01-23T18:10:00Z",
+          created_at: "2026-01-23T18:10:00Z",
+          duration_ms: 64000,
+          width: 1920,
+          height: 1080,
+          live_photo_video_id: null
+        }
+      ],
+      next_cursor: null
+    };
+
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.includes("/assets?")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => assetsPayload
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({})
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { container } = render(
+      <MemoryRouter initialEntries={["/app/viewer?asset=asset-owner-photo"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    const photoImg = await screen.findByRole("img", {
+      name: /photo preview from jan 22, 2026/i
+    });
+    expect(photoImg).toHaveAttribute(
+      "src",
+      expect.stringContaining("/assets/asset-owner-photo/original")
+    );
+    expect(container.querySelector("video")).not.toBeInTheDocument();
+
+    cleanup();
+
+    render(
+      <MemoryRouter initialEntries={["/app/viewer?asset=asset-owner-video"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    const video = await screen.findByLabelText(/video playback from jan 23, 2026/i);
+    expect(video).toHaveAttribute(
+      "src",
+      expect.stringContaining("/assets/asset-owner-video/stream")
+    );
+    expect(video).toHaveAttribute(
+      "poster",
+      expect.stringContaining("/assets/asset-owner-video/thumb")
+    );
+  });
+
   it("starts and completes public ZIP downloads", async () => {
     mockedSessionStatus.mockResolvedValue(false);
 

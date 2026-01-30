@@ -89,3 +89,4 @@
 - 2026-01-30 09:14 MST - done - Serve frontend dist with SPA fallback
 - 2026-01-30 09:27 MST - done - Add share listing endpoint and album share management UI
 - 2026-01-30 09:35 MST - done - Add public original download endpoint and UI
+- 2026-01-30 09:37 MST - done - Use originals for owner photo viewer

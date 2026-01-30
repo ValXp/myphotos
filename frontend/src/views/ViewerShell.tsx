@@ -42,6 +42,7 @@ type ViewerShellProps = {
   error: string | null;
   nextCursor?: string | null;
   previewUrl: (assetId: string) => string;
+  photoUrl?: (assetId: string) => string;
   streamUrl: (assetId: string) => string;
   backLink?: {
     to: string;
@@ -118,6 +119,7 @@ export function ViewerShell({
   error,
   nextCursor = null,
   previewUrl,
+  photoUrl,
   streamUrl,
   backLink
 }: ViewerShellProps) {
@@ -204,6 +206,9 @@ export function ViewerShell({
   const detailLine = detailParts.length > 0 ? detailParts.join(" | ") : "Details unavailable.";
   const previewAlt = selectedAsset ? `${typeLabel} preview from ${dateLabel}` : "Viewer preview";
   const videoLabel = selectedAsset ? `${typeLabel} playback from ${dateLabel}` : "Video playback";
+  const photoSource = selectedAsset
+    ? (photoUrl ? photoUrl(selectedAsset.id) : previewUrl(selectedAsset.id))
+    : "";
 
   const handleZoomIn = useCallback(() => {
     setZoomIndex((index) => Math.min(index + 1, ZOOM_LEVELS.length - 1));
@@ -252,7 +257,7 @@ export function ViewerShell({
               ) : (
                 <img
                   className={`viewer-media-item viewer-media-photo${zoomIndex > 0 ? " is-zoomed" : ""}`}
-                  src={previewUrl(selectedAsset.id)}
+                  src={photoSource}
                   alt={previewAlt}
                   style={{ transform: `scale(${zoom})` }}
                 />

@@ -55,6 +55,10 @@ function previewUrl(assetId: string): string {
   return buildApiUrl(`/assets/${assetId}/thumb`);
 }
 
+function originalUrl(assetId: string): string {
+  return buildApiUrl(`/assets/${assetId}/original`);
+}
+
 function streamUrl(assetId: string): string {
   return buildApiUrl(`/assets/${assetId}/stream`);
 }
@@ -103,6 +107,7 @@ export function ViewerView() {
       error={error}
       nextCursor={nextCursor}
       previewUrl={previewUrl}
+      photoUrl={originalUrl}
       streamUrl={streamUrl}
       backLink={{ to: "/app/timeline", label: "Back to timeline" }}
     />
