@@ -100,3 +100,42 @@
   - Add `/health` endpoint to the API shell and return the expected payload.
   - Implement basic dependency injection wiring needed for the health route.
   - `/health` returns 200 with expected payload.
+### Task 15: WebAuthn RP settings and session storage
+- Scope: auth configuration for RP settings, session storage backend (DB or Redis)
+- Acceptance criteria:
+  - Define WebAuthn RP settings (RP ID, RP name, allowed origins) in configuration.
+  - Implement session storage abstraction with create/validate/revoke operations and TTL handling.
+  - Session storage backend (DB or Redis) is wired for the auth module.
+### Task 16: Registration options endpoint
+- Scope: WebAuthn registration options endpoint
+- Acceptance criteria:
+  - Add registration options endpoint that returns WebAuthn creation options using RP settings.
+  - Persist registration challenge for replay protection and bind it to the session context.
+### Task 17: Registration verify endpoint and bootstrap rule
+- Scope: WebAuthn registration verification, credential persistence, bootstrap rule
+- Acceptance criteria:
+  - Implement registration verification endpoint that validates attestation and stored challenge.
+  - Persist passkey credential data and sign count for the owner user.
+  - Enforce bootstrap rule: if no user exists, allow first registration; otherwise require owner session.
+  - Integration tests cover registration happy path and invalid challenge.
+  - Registration is blocked when already registered unless an owner session is present.
+### Task 18: Login options endpoint
+- Scope: WebAuthn login options endpoint
+- Acceptance criteria:
+  - Add login options endpoint that returns WebAuthn assertion options for the owner.
+  - Persist login challenge for replay protection and bind it to the session context.
+### Task 19: Login verify endpoint and session cookie
+- Scope: WebAuthn login verification, session creation, cookie issuance
+- Acceptance criteria:
+  - Implement login verification endpoint that validates assertion and stored challenge.
+  - Update credential sign count on successful login.
+  - Create an owner session and issue a session cookie on successful login.
+  - Session cookie is HttpOnly and SameSite with secure flag behind HTTPS.
+  - Integration tests cover login happy path and invalid challenge.
+### Task 20: Logout endpoint and auth middleware
+- Scope: logout endpoint, auth middleware, owner-only guard
+- Acceptance criteria:
+  - Implement logout endpoint that revokes the active session.
+  - Add auth middleware that validates the owner session for protected routes.
+  - Owner-only routes reject unauthenticated requests.
+  - Public share routes remain unauthenticated.
