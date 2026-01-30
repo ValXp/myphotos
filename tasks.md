@@ -223,3 +223,38 @@
   - Add retry policies with backoff for metadata, thumbnail, and transcode jobs.
   - Record and report failures for media jobs with actionable error context.
   - Unit tests cover retry and failure reporting behavior (TDD, >= 90% unit coverage for media jobs module).
+### Task 34: Timeline endpoint with cursor pagination
+- Scope: `/assets` timeline endpoint with cursor pagination (newest-first)
+- Acceptance criteria:
+  - Implement `/assets` timeline endpoint with stable ordering and cursor pagination (newest-first).
+  - Integration tests cover cursor pagination behavior.
+### Task 35: Timeline filters and indexes
+- Scope: `/assets` date range and bbox filters, DB indexing for query fields
+- Acceptance criteria:
+  - Add date range and bbox filters to the `/assets` timeline endpoint.
+  - Add DB indexes needed for filter fields.
+  - Integration tests cover date range and bbox filters.
+### Task 36: Asset detail endpoint
+- Scope: `/assets/{id}` detail endpoint
+- Acceptance criteria:
+  - Implement `/assets/{id}` detail endpoint exposing metadata and variants.
+  - Integration tests cover asset detail responses.
+### Task 37: Thumbnail and original endpoints
+- Scope: `/assets/{id}/thumb` and `/assets/{id}/original` endpoints
+- Acceptance criteria:
+  - Implement thumbnail and original endpoints with cache headers.
+  - Endpoints return correct content types.
+  - Add range request support for original downloads.
+  - Range request tests cover original downloads.
+### Task 38: Streaming and Live endpoints
+- Scope: `/assets/{id}/stream` and `/assets/{id}/live` endpoints
+- Acceptance criteria:
+  - Implement stream and Live Photo video endpoints for transcodes and live assets.
+  - Add range request support for streams.
+  - Endpoints return correct content types.
+### Task 39: Library endpoint access control
+- Scope: library API authorization and public route lockdown
+- Acceptance criteria:
+  - Library endpoints require an owner session.
+  - Public endpoints remain limited to album-only data (no library exposure).
+  - Integration tests cover unauthorized access to `/assets` endpoints.
