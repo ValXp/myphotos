@@ -56,3 +56,4 @@
 - 2026-01-30 02:49 MST - done - Add album zip job endpoints
 
 - 2026-01-30 02:55 MST - done - Add album zip download and invalidation
+- 2026-01-30 03:05 MST - done - Add owner app shell and auth gate UI

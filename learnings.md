@@ -37,3 +37,4 @@
 - 2026-01-30 02:20 MST: Added auth coverage for /assets endpoints; no new environment issues.
 
 - 2026-01-30 02:55 MST: ZIP status should treat invalidated album zips as idle even if the latest job is done, otherwise status stays done after album changes.
+- 2026-01-30 03:03 MST: Frontend npm install reports 2 moderate vulnerabilities; run `npm audit` / `npm audit fix --force` if addressing.
