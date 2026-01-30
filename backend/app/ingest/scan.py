@@ -44,6 +44,9 @@ class FullScanJob:
                 stats.errors.append(f"{path}: {exc}")
                 continue
             size = stat.st_size
+            device = stat.st_dev
+            inode = stat.st_ino
+            mtime_ns = stat.st_mtime_ns
             mime = guess_mime(path)
             asset_type = asset_type_for_path(path)
             normalized = normalize_path(path)
@@ -57,11 +60,14 @@ class FullScanJob:
                         original_path=normalized,
                         original_bytes=size,
                         original_mime=mime,
+                        original_device=device,
+                        original_inode=inode,
+                        original_mtime_ns=mtime_ns,
                     )
                 )
                 stats.created += 1
             else:
-                if _update_asset(asset, asset_type, size, mime):
+                if _update_asset(asset, asset_type, size, mime, device, inode, mtime_ns):
                     stats.updated += 1
                 else:
                     stats.unchanged += 1
@@ -125,7 +131,15 @@ def normalize_path(path: Path) -> str:
     return str(path.expanduser().resolve(strict=False))
 
 
-def _update_asset(asset: Asset, asset_type: AssetType, size: int, mime: str) -> bool:
+def _update_asset(
+    asset: Asset,
+    asset_type: AssetType,
+    size: int,
+    mime: str,
+    device: int,
+    inode: int,
+    mtime_ns: int,
+) -> bool:
     changed = False
     if asset.type != asset_type:
         asset.type = asset_type
@@ -135,5 +149,14 @@ def _update_asset(asset: Asset, asset_type: AssetType, size: int, mime: str) -> 
         changed = True
     if asset.original_mime != mime:
         asset.original_mime = mime
+        changed = True
+    if asset.original_device != device:
+        asset.original_device = device
+        changed = True
+    if asset.original_inode != inode:
+        asset.original_inode = inode
+        changed = True
+    if asset.original_mtime_ns != mtime_ns:
+        asset.original_mtime_ns = mtime_ns
         changed = True
     return changed

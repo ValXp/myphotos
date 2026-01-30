@@ -82,6 +82,9 @@ class Asset(Base):
     original_path: Mapped[str] = mapped_column(Text, nullable=False)
     original_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     original_mime: Mapped[str] = mapped_column(String(255), nullable=False)
+    original_device: Mapped[int | None] = mapped_column(BigInteger)
+    original_inode: Mapped[int | None] = mapped_column(BigInteger)
+    original_mtime_ns: Mapped[int | None] = mapped_column(BigInteger)
 
     variants: Mapped[list["AssetVariant"]] = relationship(
         back_populates="asset", cascade="all, delete-orphan"

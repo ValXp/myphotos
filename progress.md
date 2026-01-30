@@ -33,3 +33,4 @@
 - 2026-01-30 00:02 MST - done - Add file type registry and Live Photo pairing
 - 2026-01-30 00:08 MST - done - Add full scan job and unit tests
 - 2026-01-30 00:17 MST - done - Add filesystem watcher events
+- 2026-01-30 00:26 MST - done - Add move/delete reconciliation logic
