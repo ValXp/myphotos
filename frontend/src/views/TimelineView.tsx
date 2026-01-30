@@ -65,6 +65,42 @@ type AlbumItemsResponse = {
   item_count: number;
 };
 
+type FilterDraft = {
+  startDate: string;
+  endDate: string;
+  minLat: string;
+  minLon: string;
+  maxLat: string;
+  maxLon: string;
+};
+
+type ActiveFilters = {
+  start?: string;
+  end?: string;
+  minLat?: number;
+  minLon?: number;
+  maxLat?: number;
+  maxLon?: number;
+};
+
+const FILTER_KEYS = [
+  "startDate",
+  "endDate",
+  "minLat",
+  "minLon",
+  "maxLat",
+  "maxLon"
+] as const;
+
+const EMPTY_FILTER_DRAFT: FilterDraft = {
+  startDate: "",
+  endDate: "",
+  minLat: "",
+  minLon: "",
+  maxLat: "",
+  maxLon: ""
+};
+
 function buildApiUrl(path: string): string {
   if (!API_BASE_URL) {
     return path;
@@ -164,11 +200,164 @@ function liveVideoUrl(assetId: string): string {
   return buildApiUrl(`/assets/${assetId}/live`);
 }
 
-async function fetchAssets(cursor: string | null): Promise<AssetsResponse> {
+function buildAssetParams(cursor: string | null, filters: ActiveFilters): URLSearchParams {
   const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
   if (cursor) {
     params.set("cursor", cursor);
   }
+  if (filters.start) {
+    params.set("start", filters.start);
+  }
+  if (filters.end) {
+    params.set("end", filters.end);
+  }
+  if (filters.minLat !== undefined) {
+    params.set("min_lat", String(filters.minLat));
+  }
+  if (filters.minLon !== undefined) {
+    params.set("min_lon", String(filters.minLon));
+  }
+  if (filters.maxLat !== undefined) {
+    params.set("max_lat", String(filters.maxLat));
+  }
+  if (filters.maxLon !== undefined) {
+    params.set("max_lon", String(filters.maxLon));
+  }
+  return params;
+}
+
+function parseDateInput(value: string, endOfDay: boolean): string | null {
+  if (!value) {
+    return null;
+  }
+  const parts = value.split("-");
+  if (parts.length !== 3) {
+    return null;
+  }
+  const year = Number(parts[0]);
+  const month = Number(parts[1]);
+  const day = Number(parts[2]);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return null;
+  }
+  const hours = endOfDay ? 23 : 0;
+  const minutes = endOfDay ? 59 : 0;
+  const seconds = endOfDay ? 59 : 0;
+  const ms = endOfDay ? 999 : 0;
+  const parsed = new Date(Date.UTC(year, month - 1, day, hours, minutes, seconds, ms));
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return parsed.toISOString();
+}
+
+function parseNumberInput(value: string): number | null {
+  if (!value.trim()) {
+    return null;
+  }
+  const parsed = Number(value);
+  if (Number.isNaN(parsed) || !Number.isFinite(parsed)) {
+    return null;
+  }
+  return parsed;
+}
+
+function hasFilterInput(filters: FilterDraft): boolean {
+  return FILTER_KEYS.some((key) => filters[key].trim() !== "");
+}
+
+function sameFilterDraft(a: FilterDraft, b: FilterDraft): boolean {
+  return FILTER_KEYS.every((key) => a[key] === b[key]);
+}
+
+function resolveFilters(draft: FilterDraft): { filters: ActiveFilters; error: string | null } {
+  const errors: string[] = [];
+  const start = parseDateInput(draft.startDate, false);
+  const end = parseDateInput(draft.endDate, true);
+  if (draft.startDate && !start) {
+    errors.push("Start date is invalid.");
+  }
+  if (draft.endDate && !end) {
+    errors.push("End date is invalid.");
+  }
+  if (start && end && new Date(start).getTime() > new Date(end).getTime()) {
+    errors.push("Start date must be on or before end date.");
+  }
+
+  const bboxInputs = [draft.minLat, draft.minLon, draft.maxLat, draft.maxLon].map((value) =>
+    value.trim()
+  );
+  const hasAnyBbox = bboxInputs.some(Boolean);
+  let minLat: number | null = null;
+  let minLon: number | null = null;
+  let maxLat: number | null = null;
+  let maxLon: number | null = null;
+  if (hasAnyBbox) {
+    if (bboxInputs.some((value) => value === "")) {
+      errors.push("Enter all four bounds for location filtering.");
+    } else {
+      minLat = parseNumberInput(draft.minLat);
+      minLon = parseNumberInput(draft.minLon);
+      maxLat = parseNumberInput(draft.maxLat);
+      maxLon = parseNumberInput(draft.maxLon);
+      if (minLat === null || minLon === null || maxLat === null || maxLon === null) {
+        errors.push("Location bounds must be valid numbers.");
+      } else {
+        if (minLat < -90 || maxLat > 90) {
+          errors.push("Latitude bounds must be between -90 and 90.");
+        }
+        if (minLon < -180 || maxLon > 180) {
+          errors.push("Longitude bounds must be between -180 and 180.");
+        }
+        if (minLat > maxLat || minLon > maxLon) {
+          errors.push("Location bounds must be ordered from min to max.");
+        }
+      }
+    }
+  }
+
+  if (errors.length > 0) {
+    return { filters: {}, error: errors.join(" ") };
+  }
+
+  const filters: ActiveFilters = {};
+  if (start) {
+    filters.start = start;
+  }
+  if (end) {
+    filters.end = end;
+  }
+  if (hasAnyBbox) {
+    filters.minLat = minLat ?? undefined;
+    filters.minLon = minLon ?? undefined;
+    filters.maxLat = maxLat ?? undefined;
+    filters.maxLon = maxLon ?? undefined;
+  }
+  return { filters, error: null };
+}
+
+function hasActiveFilters(filters: ActiveFilters): boolean {
+  return (
+    !!filters.start ||
+    !!filters.end ||
+    filters.minLat !== undefined ||
+    filters.minLon !== undefined ||
+    filters.maxLat !== undefined ||
+    filters.maxLon !== undefined
+  );
+}
+
+function buildEmptyFilterDraft(): FilterDraft {
+  return { ...EMPTY_FILTER_DRAFT };
+}
+
+async function fetchAssets(cursor: string | null, filters: ActiveFilters): Promise<AssetsResponse> {
+  const params = buildAssetParams(cursor, filters);
   return requestJson<AssetsResponse>(`/assets?${params.toString()}`, { method: "GET" });
 }
 
@@ -188,12 +377,18 @@ export function TimelineView() {
   const [actionStatus, setActionStatus] = useState<"idle" | "working" | "success" | "error">("idle");
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
+  const [filterDraft, setFilterDraft] = useState<FilterDraft>(() => buildEmptyFilterDraft());
+  const [appliedFilterDraft, setAppliedFilterDraft] = useState<FilterDraft>(() =>
+    buildEmptyFilterDraft()
+  );
+  const [activeFilters, setActiveFilters] = useState<ActiveFilters>({});
+  const [filterError, setFilterError] = useState<string | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const inFlightRef = useRef(false);
   const { registerVideoRef, handleMouseEnter, handleMouseLeave } = useLivePhotoHover();
 
   const loadAssets = useCallback(
-    async (cursor: string | null, mode: "initial" | "more") => {
+    async (cursor: string | null, mode: "initial" | "more", filters: ActiveFilters) => {
       if (inFlightRef.current) {
         return;
       }
@@ -208,7 +403,7 @@ export function TimelineView() {
         setActionMessage(null);
       }
       try {
-        const data = await fetchAssets(cursor);
+        const data = await fetchAssets(cursor, filters);
         setItems((prev) => (mode === "initial" ? data.items : [...prev, ...data.items]));
         setNextCursor(data.next_cursor ?? null);
         setStatus("ready");
@@ -335,20 +530,46 @@ export function TimelineView() {
   }, [refreshSession, selectedAlbumId, selectedIds]);
 
   const handleRefresh = useCallback(() => {
-    void loadAssets(null, "initial");
+    void loadAssets(null, "initial", activeFilters);
     void loadAlbums();
-  }, [loadAssets, loadAlbums]);
+  }, [activeFilters, loadAssets, loadAlbums]);
 
   const handleLoadMore = useCallback(() => {
     if (!nextCursor) {
       return;
     }
-    void loadAssets(nextCursor, "more");
-  }, [loadAssets, nextCursor]);
+    void loadAssets(nextCursor, "more", activeFilters);
+  }, [activeFilters, loadAssets, nextCursor]);
+
+  const handleFilterChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = event.target;
+    const key = name as keyof FilterDraft;
+    setFilterDraft((prev) => ({ ...prev, [key]: value }));
+    setFilterError(null);
+  }, []);
+
+  const handleApplyFilters = useCallback(() => {
+    const resolved = resolveFilters(filterDraft);
+    if (resolved.error) {
+      setFilterError(resolved.error);
+      return;
+    }
+    setFilterError(null);
+    setAppliedFilterDraft(filterDraft);
+    setActiveFilters(resolved.filters);
+  }, [filterDraft]);
+
+  const handleClearFilters = useCallback(() => {
+    const cleared = buildEmptyFilterDraft();
+    setFilterDraft(cleared);
+    setAppliedFilterDraft(cleared);
+    setFilterError(null);
+    setActiveFilters({});
+  }, []);
 
   useEffect(() => {
-    void loadAssets(null, "initial");
-  }, [loadAssets]);
+    void loadAssets(null, "initial", activeFilters);
+  }, [activeFilters, loadAssets]);
 
   useEffect(() => {
     void loadAlbums();
@@ -384,10 +605,22 @@ export function TimelineView() {
   const isLoading = status === "loading";
   const isLoadingMore = status === "loading-more";
   const selectedCount = selectedIds.size;
+  const hasFilterChanges = !sameFilterDraft(filterDraft, appliedFilterDraft);
+  const hasDraftFilters = hasFilterInput(filterDraft);
+  const hasAppliedFilters = hasActiveFilters(activeFilters);
+  const canApplyFilters = hasFilterChanges && !isLoading && !isLoadingMore && !isAdding;
+  const canClearFilters = (hasDraftFilters || hasAppliedFilters) && !isLoading && !isAdding;
   const hasAlbums = albums.length > 0;
   const isAlbumLoading = albumStatus === "loading";
   const isActionError = actionStatus === "error";
   const isActionSuccess = actionStatus === "success";
+  const filterPills: string[] = [];
+  if (activeFilters.start || activeFilters.end) {
+    filterPills.push("Date range");
+  }
+  if (activeFilters.minLat !== undefined) {
+    filterPills.push("Location bounds");
+  }
 
   return (
     <section className="page">
@@ -405,6 +638,11 @@ export function TimelineView() {
             <span className="pill">{items.length} loaded</span>
             <span className="pill">Newest first</span>
             <span className="pill">{selectedCount} selected</span>
+            {filterPills.map((label) => (
+              <span className="pill" key={label}>
+                {label}
+              </span>
+            ))}
           </div>
           <div className="selection-tools">
             <button className="ghost" onClick={handleSelectAll} disabled={!hasItems}>
@@ -442,7 +680,107 @@ export function TimelineView() {
             Refresh
           </button>
         </div>
+        <div className="timeline-filters" role="group" aria-label="Timeline filters">
+          <div className="filter-section">
+            <p className="filter-title">Date range</p>
+            <div className="filter-row">
+              <label className="field" htmlFor="filter-start-date">
+                <span>Start date</span>
+                <input
+                  id="filter-start-date"
+                  name="startDate"
+                  className="text-input"
+                  type="date"
+                  value={filterDraft.startDate}
+                  onChange={handleFilterChange}
+                />
+              </label>
+              <label className="field" htmlFor="filter-end-date">
+                <span>End date</span>
+                <input
+                  id="filter-end-date"
+                  name="endDate"
+                  className="text-input"
+                  type="date"
+                  value={filterDraft.endDate}
+                  onChange={handleFilterChange}
+                />
+              </label>
+            </div>
+          </div>
+          <div className="filter-section">
+            <p className="filter-title">Location bounds</p>
+            <div className="filter-row">
+              <label className="field" htmlFor="filter-min-lat">
+                <span>Min lat</span>
+                <input
+                  id="filter-min-lat"
+                  name="minLat"
+                  className="text-input"
+                  type="number"
+                  step="0.0001"
+                  value={filterDraft.minLat}
+                  onChange={handleFilterChange}
+                  placeholder="-90 to 90"
+                />
+              </label>
+              <label className="field" htmlFor="filter-min-lon">
+                <span>Min lon</span>
+                <input
+                  id="filter-min-lon"
+                  name="minLon"
+                  className="text-input"
+                  type="number"
+                  step="0.0001"
+                  value={filterDraft.minLon}
+                  onChange={handleFilterChange}
+                  placeholder="-180 to 180"
+                />
+              </label>
+              <label className="field" htmlFor="filter-max-lat">
+                <span>Max lat</span>
+                <input
+                  id="filter-max-lat"
+                  name="maxLat"
+                  className="text-input"
+                  type="number"
+                  step="0.0001"
+                  value={filterDraft.maxLat}
+                  onChange={handleFilterChange}
+                  placeholder="-90 to 90"
+                />
+              </label>
+              <label className="field" htmlFor="filter-max-lon">
+                <span>Max lon</span>
+                <input
+                  id="filter-max-lon"
+                  name="maxLon"
+                  className="text-input"
+                  type="number"
+                  step="0.0001"
+                  value={filterDraft.maxLon}
+                  onChange={handleFilterChange}
+                  placeholder="-180 to 180"
+                />
+              </label>
+            </div>
+          </div>
+          <div className="timeline-filter-actions">
+            <button className="ghost" onClick={handleApplyFilters} disabled={!canApplyFilters}>
+              Apply filters
+            </button>
+            <button className="ghost" onClick={handleClearFilters} disabled={!canClearFilters}>
+              Clear filters
+            </button>
+            {hasAppliedFilters && <span className="hint">Filters applied to timeline results.</span>}
+          </div>
+        </div>
       </header>
+      {filterError && (
+        <div className="status error" role="alert">
+          {filterError}
+        </div>
+      )}
       {actionMessage && (
         <div
           className={`status${isActionError ? " error" : ""}${isActionSuccess ? " success" : ""}`}

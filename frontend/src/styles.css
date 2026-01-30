@@ -496,6 +496,41 @@ button {
   flex-wrap: wrap;
 }
 
+.timeline-filters {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(31, 122, 122, 0.08);
+  display: grid;
+  gap: 16px;
+}
+
+.filter-section {
+  display: grid;
+  gap: 10px;
+}
+
+.filter-title {
+  font-size: 0.75rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--accent-2);
+}
+
+.filter-row {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.timeline-filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .selection-tools,
 .album-picker {
   display: flex;

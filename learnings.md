@@ -43,3 +43,5 @@
 - 2026-01-30 03:33 MST: Pytest was missing from /root/myphotos/.venv; installed it to run backend tests.
 
 - 2026-01-30 04:10 MST: Frontend tests continue to emit React Router v7 future-flag warnings during vitest runs.
+
+- 2026-01-30 04:23 MST: Frontend tests can leave duplicate DOM nodes without cleanup; call React Testing Library cleanup in tests when using multiple renders.

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
@@ -28,6 +28,7 @@ vi.mock("./auth/webauthn", () => {
 const mockedSessionStatus = vi.mocked(webauthn.fetchSessionStatus);
 
 afterEach(() => {
+  cleanup();
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
@@ -121,5 +122,88 @@ describe("App flows", () => {
       screen.getByRole("img", { name: "Photo thumbnail from Jan 20, 2026" })
     ).toHaveAttribute("src", expect.stringContaining("/assets/asset-1/thumb"));
     expect(container.querySelector("video.live-photo-video")).toBeInTheDocument();
+  });
+
+  it("applies date and location filters to timeline requests", async () => {
+    mockedSessionStatus.mockResolvedValue(true);
+
+    const assetPayload = {
+      items: [],
+      next_cursor: null
+    };
+
+    const albumPayload = {
+      items: []
+    };
+
+    const assetUrls: string[] = [];
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.includes("/assets?")) {
+        assetUrls.push(url);
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => assetPayload
+        });
+      }
+      if (url.includes("/albums")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => albumPayload
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({})
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <MemoryRouter initialEntries={["/app/timeline"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    await screen.findByText(/no assets yet/i);
+
+    fireEvent.change(screen.getByLabelText(/start date/i), {
+      target: { value: "2026-01-01" }
+    });
+    fireEvent.change(screen.getByLabelText(/end date/i), {
+      target: { value: "2026-01-10" }
+    });
+    fireEvent.change(screen.getByLabelText(/min lat/i), {
+      target: { value: "40" }
+    });
+    fireEvent.change(screen.getByLabelText(/min lon/i), {
+      target: { value: "-120" }
+    });
+    fireEvent.change(screen.getByLabelText(/max lat/i), {
+      target: { value: "42" }
+    });
+    fireEvent.change(screen.getByLabelText(/max lon/i), {
+      target: { value: "-118" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /apply filters/i }));
+
+    await waitFor(() => {
+      expect(assetUrls.length).toBeGreaterThan(1);
+    });
+
+    const lastUrl = assetUrls[assetUrls.length - 1];
+    const params = new URL(lastUrl, "http://localhost").searchParams;
+    expect(params.get("start")).toBe("2026-01-01T00:00:00.000Z");
+    expect(params.get("end")).toBe("2026-01-10T23:59:59.999Z");
+    expect(params.get("min_lat")).toBe("40");
+    expect(params.get("min_lon")).toBe("-120");
+    expect(params.get("max_lat")).toBe("42");
+    expect(params.get("max_lon")).toBe("-118");
   });
 });
