@@ -17,3 +17,5 @@
 - 2026-01-29 22:45 MST - done - Expand plan 09 tasks
 - 2026-01-29 22:49 MST - done - Add backend skeleton and typing tooling
 - 2026-01-29 22:50 MST - done - Ignore python cache files
+
+- 2026-01-29 22:55 MST - done - Add config loader and storage layout
