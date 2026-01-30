@@ -80,3 +80,4 @@
 - 2026-01-30 05:50 MST - done - Add integration test harness and CI job
 - 2026-01-30 08:30 MST - done - Normalize Postgres URLs for psycopg driver
 - 2026-01-30 08:34 MST - done - Link live photo ingest jobs
+- 2026-01-30 08:39 MST - done - Add live photo live video variant in transcode

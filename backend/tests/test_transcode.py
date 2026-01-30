@@ -8,8 +8,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.db.base import Base
-from app.db.enums import AssetType
+from app.db.enums import AssetType, AssetVariantKind
 from app.db.models import Asset, AssetVariant
+from app.ingest.live_photos import link_live_photo_pairs
 from app.media.transcode import (
     TranscodeError,
     TranscodeNotFoundError,
@@ -21,7 +22,7 @@ from app.media.transcode import (
     transcode_profiles_for_asset,
     transcode_segment_pattern,
 )
-from app.media.variants import VIDEO_RENDITION_PROFILES
+from app.media.variants import LIVE_VIDEO_PROFILE, VIDEO_RENDITION_PROFILES, variant_output_path
 
 
 def _create_session():
@@ -45,6 +46,12 @@ def _fake_transcoder(
     segment_path.parent.mkdir(parents=True, exist_ok=True)
     segment_path.write_bytes(b"segment")
     playlist_path.write_text("#EXTM3U\n", encoding="ascii")
+
+
+def _fake_live_video_generator(source_path: Path, output_path: Path) -> None:
+    del source_path
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_bytes(b"live-video")
 
 
 def _ffmpeg_available() -> bool:
@@ -163,6 +170,68 @@ class TranscodeJobTest(unittest.TestCase):
                     segment_pattern = transcode_segment_pattern(derived, asset.id, profile)
                     segment_path = format_segment_path(segment_pattern, 0)
                     self.assertTrue(segment_path.exists())
+        finally:
+            session.close()
+            engine.dispose()
+
+    def test_live_photo_transcode_creates_live_video_variant(self) -> None:
+        session, engine = _create_session()
+        try:
+            with TemporaryDirectory() as tmpdir:
+                root = Path(tmpdir)
+                still_path = root / "IMG_9001.jpg"
+                video_path = root / "IMG_9001.mov"
+                derived = root / "derived"
+                still_path.write_bytes(b"still")
+                video_path.write_bytes(b"video")
+
+                still = Asset(
+                    type=AssetType.photo,
+                    original_path=str(still_path),
+                    original_bytes=still_path.stat().st_size,
+                    original_mime="image/jpeg",
+                )
+                video = Asset(
+                    type=AssetType.video,
+                    original_path=str(video_path),
+                    original_bytes=video_path.stat().st_size,
+                    original_mime="video/quicktime",
+                )
+                session.add_all([still, video])
+                session.flush()
+
+                link_live_photo_pairs(session)
+
+                variants = run_transcode_job(
+                    session,
+                    still.id,
+                    derived_root=derived,
+                    transcode_func=_fake_transcoder,
+                    live_video_generator=_fake_live_video_generator,
+                )
+
+                self.assertEqual(
+                    len(variants), len(VIDEO_RENDITION_PROFILES) + 1
+                )
+                live_variants = [
+                    variant
+                    for variant in variants
+                    if variant.kind == AssetVariantKind.live_video
+                ]
+                self.assertEqual(len(live_variants), 1)
+                live_variant = live_variants[0]
+                self.assertEqual(live_variant.profile, LIVE_VIDEO_PROFILE.name)
+                expected_path = variant_output_path(
+                    derived, still.id, LIVE_VIDEO_PROFILE
+                )
+                self.assertEqual(live_variant.path, str(expected_path))
+                self.assertTrue(expected_path.exists())
+                stored = (
+                    session.query(AssetVariant)
+                    .filter(AssetVariant.kind == AssetVariantKind.live_video)
+                    .one()
+                )
+                self.assertEqual(stored.path, str(expected_path))
         finally:
             session.close()
             engine.dispose()

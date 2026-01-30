@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.db.enums import AssetType, AssetVariantKind
 from app.db.models import Asset, AssetVariant
+from app.media.live_video import LiveVideoGenerator, run_live_video_job
 from app.media.variants import (
     VIDEO_RENDITION_PROFILES,
     VariantProfile,
@@ -81,6 +82,7 @@ def run_transcode_job(
     derived_root: Path,
     ffmpeg_path: str = "ffmpeg",
     transcode_func: TranscodeFunc | None = None,
+    live_video_generator: LiveVideoGenerator | None = None,
 ) -> list[AssetVariant]:
     asset = session.get(Asset, asset_id)
     if asset is None:
@@ -124,6 +126,15 @@ def run_transcode_job(
     manifest_path = master_manifest_path(derived_root, asset.id)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(build_master_manifest(profiles), encoding="ascii")
+    if asset.type == AssetType.live_photo:
+        live_variant = run_live_video_job(
+            session,
+            asset.id,
+            derived_root=derived_root,
+            ffmpeg_path=ffmpeg_path,
+            generator=live_video_generator,
+        )
+        variants.append(live_variant)
     session.flush()
     return variants
 
