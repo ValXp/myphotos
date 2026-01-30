@@ -62,3 +62,4 @@
 - 2026-01-30 03:34 MST - done - Add album list and album grid views
 - 2026-01-30 03:47 MST - done - Add multi-select album item actions
 - 2026-01-30 03:57 MST - done - Add viewer navigation with hover arrows
+- 2026-01-30 04:02 MST - done - Add viewer zoom controls and video playback

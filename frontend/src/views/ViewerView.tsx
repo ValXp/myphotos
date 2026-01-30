@@ -4,6 +4,8 @@ import { useAuth } from "../auth/AuthContext";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 const PAGE_SIZE = 200;
+const ZOOM_LEVELS = [1, 1.5, 2, 3];
+const DEFAULT_ZOOM_INDEX = 0;
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -140,6 +142,10 @@ function previewUrl(assetId: string): string {
   return buildApiUrl(`/assets/${assetId}/thumb`);
 }
 
+function streamUrl(assetId: string): string {
+  return buildApiUrl(`/assets/${assetId}/stream`);
+}
+
 async function fetchAssets(): Promise<AssetsResponse> {
   const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
   return requestJson<AssetsResponse>(`/assets?${params.toString()}`, { method: "GET" });
@@ -151,6 +157,7 @@ export function ViewerView() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedAssetId = searchParams.get("asset");
 
@@ -203,6 +210,10 @@ export function ViewerView() {
     setSearchParams({ asset: items[0].id }, { replace: true });
   }, [items, paramIndex, selectedAssetId, setSearchParams]);
 
+  useEffect(() => {
+    setZoomIndex(DEFAULT_ZOOM_INDEX);
+  }, [selectedAssetId]);
+
   const selectIndex = useCallback(
     (nextIndex: number) => {
       if (nextIndex < 0 || nextIndex >= items.length) {
@@ -232,6 +243,13 @@ export function ViewerView() {
   const isLoading = status === "loading";
   const canPrev = selectedIndex > 0;
   const canNext = selectedIndex >= 0 && selectedIndex < items.length - 1;
+  const isVideo = selectedAsset?.type === "video";
+  const isZoomable = !!selectedAsset && !isVideo;
+  const zoom = ZOOM_LEVELS[zoomIndex] ?? ZOOM_LEVELS[DEFAULT_ZOOM_INDEX];
+  const canZoomIn = isZoomable && zoomIndex < ZOOM_LEVELS.length - 1;
+  const canZoomOut = isZoomable && zoomIndex > 0;
+  const canResetZoom = isZoomable && zoomIndex !== DEFAULT_ZOOM_INDEX;
+  const zoomLabel = `${Math.round(zoom * 100)}%`;
 
   const typeLabel = selectedAsset ? formatTypeLabel(selectedAsset.type) : "Asset";
   const dateLabel = selectedAsset ? formatDateLabel(selectedAsset) : "Viewer";
@@ -243,6 +261,19 @@ export function ViewerView() {
   );
   const detailLine = detailParts.length > 0 ? detailParts.join(" | ") : "Details unavailable.";
   const previewAlt = selectedAsset ? `${typeLabel} preview from ${dateLabel}` : "Viewer preview";
+  const videoLabel = selectedAsset ? `${typeLabel} playback from ${dateLabel}` : "Video playback";
+
+  const handleZoomIn = useCallback(() => {
+    setZoomIndex((index) => Math.min(index + 1, ZOOM_LEVELS.length - 1));
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    setZoomIndex((index) => Math.max(index - 1, 0));
+  }, []);
+
+  const handleZoomReset = useCallback(() => {
+    setZoomIndex(DEFAULT_ZOOM_INDEX);
+  }, []);
 
   return (
     <section className="page viewer">
@@ -252,7 +283,7 @@ export function ViewerView() {
             {error}
           </div>
         )}
-        <div className="viewer-media">
+        <div className={`viewer-media${isVideo ? " is-video" : ""}`}>
           {isLoading && !hasItems && (
             <div className="viewer-placeholder" role="status">
               Loading viewer...
@@ -265,7 +296,25 @@ export function ViewerView() {
           )}
           {selectedAsset && (
             <>
-              <img src={previewUrl(selectedAsset.id)} alt={previewAlt} />
+              {isVideo ? (
+                <video
+                  key={selectedAsset.id}
+                  className="viewer-media-item"
+                  controls
+                  preload="metadata"
+                  playsInline
+                  poster={previewUrl(selectedAsset.id)}
+                  src={streamUrl(selectedAsset.id)}
+                  aria-label={videoLabel}
+                />
+              ) : (
+                <img
+                  className={`viewer-media-item viewer-media-photo${zoomIndex > 0 ? " is-zoomed" : ""}`}
+                  src={previewUrl(selectedAsset.id)}
+                  alt={previewAlt}
+                  style={{ transform: `scale(${zoom})` }}
+                />
+              )}
               <span className="viewer-badge">{typeLabel}</span>
               {durationLabel && <span className="viewer-duration">{durationLabel}</span>}
             </>
@@ -290,15 +339,49 @@ export function ViewerView() {
           </div>
         </div>
         <div className="viewer-controls">
-          <button className="ghost" onClick={handlePrev} disabled={!canPrev}>
-            Prev
-          </button>
-          <div className="viewer-count">
-            {selectedIndex >= 0 ? `${selectedIndex + 1} of ${items.length}` : "No assets loaded"}
+          <div className="viewer-nav">
+            <button className="ghost" onClick={handlePrev} disabled={!canPrev}>
+              Prev
+            </button>
+            <div className="viewer-count">
+              {selectedIndex >= 0 ? `${selectedIndex + 1} of ${items.length}` : "No assets loaded"}
+            </div>
+            <button className="ghost" onClick={handleNext} disabled={!canNext}>
+              Next
+            </button>
           </div>
-          <button className="ghost" onClick={handleNext} disabled={!canNext}>
-            Next
-          </button>
+          <div className="viewer-zoom">
+            <span className="viewer-zoom-label">Zoom</span>
+            <div className="viewer-zoom-buttons">
+              <button
+                className="ghost viewer-zoom-btn"
+                onClick={handleZoomOut}
+                disabled={!canZoomOut}
+                aria-label="Zoom out"
+              >
+                -
+              </button>
+              <span className="viewer-zoom-value" aria-live="polite">
+                {zoomLabel}
+              </span>
+              <button
+                className="ghost viewer-zoom-btn"
+                onClick={handleZoomIn}
+                disabled={!canZoomIn}
+                aria-label="Zoom in"
+              >
+                +
+              </button>
+              <button
+                className="ghost viewer-zoom-btn"
+                onClick={handleZoomReset}
+                disabled={!canResetZoom}
+                aria-label="Reset zoom"
+              >
+                Fit
+              </button>
+            </div>
+          </div>
         </div>
         {nextCursor && hasItems && (
           <p className="hint">More assets are available in the timeline.</p>

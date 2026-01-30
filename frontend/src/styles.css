@@ -305,12 +305,26 @@ button {
   place-items: center;
 }
 
-.viewer-media img,
-.viewer-media video {
+.viewer-media-item {
   width: 100%;
   height: 100%;
   object-fit: contain;
   display: block;
+  transform-origin: center;
+  transition: transform 0.25s ease;
+}
+
+.viewer-media-photo {
+  cursor: zoom-in;
+}
+
+.viewer-media-photo.is-zoomed {
+  cursor: zoom-out;
+}
+
+.viewer-media.is-video .viewer-duration {
+  top: 16px;
+  bottom: auto;
 }
 
 .viewer-controls {
@@ -318,11 +332,54 @@ button {
   gap: 12px;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.viewer-nav {
+  display: flex;
+  gap: 12px;
+  align-items: center;
 }
 
 .viewer-count {
   color: var(--muted);
   font-size: 0.9rem;
+}
+
+.viewer-zoom {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.viewer-zoom-label {
+  color: var(--muted);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+}
+
+.viewer-zoom-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.viewer-zoom-btn {
+  padding: 6px 12px;
+}
+
+.viewer-zoom-value {
+  min-width: 56px;
+  text-align: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(29, 28, 26, 0.08);
+  font-size: 0.85rem;
+  font-weight: 600;
 }
 
 .viewer-placeholder {
