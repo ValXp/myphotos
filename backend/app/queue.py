@@ -10,6 +10,7 @@ import uuid
 import redis
 
 from app.config import RedisConfig
+from app.metrics import record_job
 from app.observability import job_context
 
 DEFAULT_QUEUE_NAME = "myphotos:jobs"
@@ -136,6 +137,7 @@ class Queue:
         job = _ensure_job_id(job)
         handler = self._handlers.get(job.name)
         if handler is None:
+            record_job(job.name, "unknown")
             with job_context(job.id):
                 logger.error(
                     "job.unknown",
@@ -150,11 +152,13 @@ class Queue:
             try:
                 handler(job)
             except Exception:
+                record_job(job.name, "error")
                 logger.exception(
                     "job.error",
                     extra={"job_name": job.name, "queue": self._queue_name},
                 )
                 raise
+            record_job(job.name, "success")
             logger.info(
                 "job.complete",
                 extra={"job_name": job.name, "queue": self._queue_name},

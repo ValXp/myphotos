@@ -25,10 +25,19 @@ from app.api.ready import router as ready_router
 from app.api.public import router as public_router
 from app.api.webauthn import router as webauthn_router
 from app.config import Config, load_config
+from app.metrics import record_request
 from app.observability import REQUEST_ID_HEADER, configure_logging, request_context
 from app.queue import Queue, RedisQueueBackend, create_redis_client
 
 logger = logging.getLogger("app.api")
+
+
+def _metric_path(request: Request) -> str:
+    route = request.scope.get("route")
+    path = getattr(route, "path", None)
+    if isinstance(path, str) and path:
+        return path
+    return request.url.path
 
 
 def create_app(
@@ -67,11 +76,13 @@ def create_app(
             request_id = uuid4().hex
         request.state.request_id = request_id
         start = time.perf_counter()
+        metric_path = _metric_path(request)
         with request_context(request_id):
             try:
                 response = await call_next(request)
             except Exception:
                 duration_ms = int((time.perf_counter() - start) * 1000)
+                record_request(request.method, metric_path, None)
                 logger.exception(
                     "request.error",
                     extra={
@@ -83,6 +94,7 @@ def create_app(
                 )
                 raise
             duration_ms = int((time.perf_counter() - start) * 1000)
+            record_request(request.method, metric_path, response.status_code)
             logger.info(
                 "request.complete",
                 extra={
