@@ -127,7 +127,7 @@ Backend config is environment-driven (see `backend/app/config.py`). Defaults sho
 - `ORIGINALS_DIR` (`DATA_ROOT/originals`) Source media (read-only).
 - `DERIVED_DIR` (`DATA_ROOT/derived`) Thumbnails, transcodes, manifests.
 - `TEMP_DIR` (`DATA_ROOT/temp`) Temporary ZIP staging.
-- `DB_URL` (`postgresql://myphotos:myphotos@localhost:5432/myphotos`)
+- `DB_URL` (`postgresql+psycopg://myphotos:myphotos@localhost:5432/myphotos`)
 - `REDIS_URL` (`redis://localhost:6379/0`)
 - `APP_ENV` (`development`)
 - `APP_HOST` (`127.0.0.1`)

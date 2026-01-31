@@ -65,6 +65,19 @@ class ConfigLoaderTest(unittest.TestCase):
             with self.assertRaises(ConfigError):
                 load_config({"DATA_ROOT": root, "DB_URL": "  "})
 
+    def test_postgres_url_is_normalized_to_psycopg(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            config = load_config(
+                {
+                    "DATA_ROOT": root,
+                    "DB_URL": "postgresql://myphotos:myphotos@localhost:5432/myphotos",
+                }
+            )
+            self.assertEqual(
+                config.database.url,
+                "postgresql+psycopg://myphotos:myphotos@localhost:5432/myphotos",
+            )
+
     def test_duplicate_paths_raise(self) -> None:
         with tempfile.TemporaryDirectory() as root:
             with self.assertRaises(ConfigError):

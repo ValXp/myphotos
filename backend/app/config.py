@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-DEFAULT_DB_URL = "postgresql://myphotos:myphotos@localhost:5432/myphotos"
+DEFAULT_DB_URL = "postgresql+psycopg://myphotos:myphotos@localhost:5432/myphotos"
 DEFAULT_REDIS_URL = "redis://localhost:6379/0"
 DEFAULT_WEBAUTHN_RP_NAME = "myphotos"
 DEFAULT_SESSION_TTL_SECONDS = 60 * 60 * 24
@@ -119,7 +119,9 @@ def load_config(environ: Mapping[str, str] | None = None) -> Config:
         ]
     )
 
-    database = DatabaseConfig(url=_str_from_env(env, "DB_URL", DEFAULT_DB_URL))
+    database = DatabaseConfig(
+        url=normalize_database_url(_str_from_env(env, "DB_URL", DEFAULT_DB_URL))
+    )
     redis = RedisConfig(url=_str_from_env(env, "REDIS_URL", DEFAULT_REDIS_URL))
     app = AppConfig(
         env=_str_from_env(env, "APP_ENV", "development"),
@@ -157,6 +159,20 @@ def load_config(environ: Mapping[str, str] | None = None) -> Config:
         app=app,
         session=session,
     )
+
+
+def normalize_database_url(url: str) -> str:
+    """Normalize database URLs to the configured SQLAlchemy driver.
+
+    We default to psycopg (psycopg3). Many examples (and some hosts) still use
+    postgresql:// or postgres:// URLs which implicitly select psycopg2.
+    """
+
+    if url.startswith("postgresql://"):
+        return f"postgresql+psycopg://{url[len('postgresql://') :]}"
+    if url.startswith("postgres://"):
+        return f"postgresql+psycopg://{url[len('postgres://') :]}"
+    return url
 
 
 def _str_from_env(env: Mapping[str, str], key: str, default: str) -> str:
