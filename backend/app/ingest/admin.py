@@ -181,11 +181,16 @@ def _scan_backoff_until(
     policy: ScanBackoffPolicy,
     now_fn: Callable[[], datetime],
 ) -> datetime | None:
-    last_job = session.execute(
-        select(Job)
-        .where(Job.type == JobType.scan, Job.status == JobStatus.done)
-        .order_by(Job.created_at.desc())
-    ).scalar_one_or_none()
+    last_job = (
+        session.execute(
+            select(Job)
+            .where(Job.type == JobType.scan, Job.status == JobStatus.done)
+            .order_by(Job.created_at.desc())
+            .limit(1)
+        )
+        .scalars()
+        .first()
+    )
     if last_job is None:
         return None
     payload = last_job.payload or {}
