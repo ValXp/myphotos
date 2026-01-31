@@ -699,11 +699,16 @@ button {
 }
 
 .selection-tools,
-.album-picker {
+.album-picker,
+.scan-controls {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.scan-controls input {
+  min-width: 260px;
 }
 
 .album-picker select {

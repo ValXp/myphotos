@@ -62,6 +62,19 @@ type AlbumsResponse = {
   items: AlbumSummary[];
 };
 
+type ScanStatus = {
+  status: string;
+  job_id: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  scanned_files?: number | null;
+  discovered_files?: number | null;
+  enqueued_assets?: number | null;
+  error?: {
+    message?: string;
+  } | null;
+};
+
 type AlbumItemsResponse = {
   added: string[];
   skipped: string[];
@@ -398,6 +411,10 @@ export function TimelineView() {
   );
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>({});
   const [filterError, setFilterError] = useState<string | null>(null);
+  const [scanPath, setScanPath] = useState<string>("iphone_17_val");
+  const [scanStatus, setScanStatus] = useState<ScanStatus | null>(null);
+  const [scanMessage, setScanMessage] = useState<string | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const inFlightRef = useRef(false);
   const { registerVideoRef, handleMouseEnter, handleMouseLeave } = useLivePhotoHover();
@@ -546,6 +563,34 @@ export function TimelineView() {
       setIsAdding(false);
     }
   }, [refreshSession, selectedAlbumId, selectedIds]);
+
+  const runScan = useCallback(async () => {
+    setIsScanning(true);
+    setScanMessage(null);
+    try {
+      const params = new URLSearchParams();
+      const trimmed = scanPath.trim();
+      if (trimmed) {
+        // The API accepts relative paths under ORIGINALS_DIR as well.
+        params.append("path", trimmed);
+      }
+      const query = params.toString();
+      const data = await requestJson<ScanStatus>(
+        `/admin/index/scan${query ? `?${query}` : ""}`,
+        { method: "POST" }
+      );
+      setScanStatus(data);
+      setScanMessage("Scan started.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to start scan.";
+      setScanMessage(message);
+      if (err instanceof ApiError && err.status === 401) {
+        await refreshSession();
+      }
+    } finally {
+      setIsScanning(false);
+    }
+  }, [refreshSession, scanPath]);
 
   const handleRefresh = useCallback(() => {
     void loadAssets(null, "initial", activeFilters);
@@ -728,6 +773,20 @@ export function TimelineView() {
               Add to album
             </button>
           </div>
+
+          <div className="scan-controls" role="group" aria-label="Index scan controls">
+            <input
+              className="text-input"
+              value={scanPath}
+              onChange={(event) => setScanPath(event.target.value)}
+              placeholder="Folder under originals (blank = all)"
+              aria-label="Scan folder"
+            />
+            <button className="ghost" onClick={() => void runScan()} disabled={isScanning}>
+              {isScanning ? "Scanning..." : "Scan"}
+            </button>
+          </div>
+
           <button className="ghost" onClick={handleRefresh} disabled={isLoading || isAdding}>
             Refresh
           </button>
@@ -860,6 +919,12 @@ export function TimelineView() {
         </div>
       )}
 
+      {scanMessage && (
+        <div className="status" role="status">
+          {scanMessage}
+          {scanStatus?.job_id ? ` (job ${scanStatus.job_id})` : ""}
+        </div>
+      )}
       {filterError && (
         <div className="status error" role="alert">
           {filterError}
