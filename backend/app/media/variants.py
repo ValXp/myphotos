@@ -16,6 +16,8 @@ class VariantProfile:
     height: int | None = None
     video_bitrate_kbps: int | None = None
     audio_bitrate_kbps: int | None = None
+    # When True, this rendition should preserve HDR (10-bit) if the source is HDR.
+    hdr: bool = False
 
     def filename(self) -> str:
         return f"{self.name}.{self.extension}"
@@ -67,6 +69,9 @@ DEFAULT_VIDEO_RENDITION_PROFILES: tuple[VariantProfile, ...] = (
     ),
 )
 
+# Backwards-compatible alias for older imports/tests.
+VIDEO_RENDITION_PROFILES = DEFAULT_VIDEO_RENDITION_PROFILES
+
 
 def profiles_for_asset_type(asset_type: AssetType) -> tuple[VariantProfile, ...]:
     if asset_type == AssetType.photo:
@@ -83,6 +88,7 @@ def video_renditions_from_config(
     *,
     source_width: int | None,
     source_height: int | None,
+    source_is_hdr: bool,
 ) -> tuple[VariantProfile, ...]:
     """Build transcode rendition profiles from config.
 
@@ -104,9 +110,15 @@ def video_renditions_from_config(
         height = rendition.get("height")
         video_bitrate_kbps = rendition.get("video_bitrate_kbps")
         audio_bitrate_kbps = rendition.get("audio_bitrate_kbps")
+        hdr = rendition.get("hdr")
+        hdr_flag = bool(hdr) if isinstance(hdr, bool) else False
         if not name or not isinstance(width, int) or not isinstance(height, int):
             continue
         if not isinstance(video_bitrate_kbps, int) or not isinstance(audio_bitrate_kbps, int):
+            continue
+
+        # HDR renditions are only produced for HDR sources.
+        if hdr_flag and not source_is_hdr:
             continue
 
         min_w = rendition.get("min_source_width")
@@ -128,6 +140,7 @@ def video_renditions_from_config(
                 height=height,
                 video_bitrate_kbps=video_bitrate_kbps,
                 audio_bitrate_kbps=audio_bitrate_kbps,
+                hdr=hdr_flag,
             )
         )
 

@@ -83,6 +83,7 @@ class MediaWorker:
                 derived_root=self._config.paths.derived,
                 config=self._config,
                 ffmpeg_path=ffmpeg_path,
+                ffprobe_path=ffprobe_path,
                 transcode_func=transcode_func,
                 live_video_generator=live_video_generator,
             )

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -36,18 +38,26 @@ class TranscodeNotFoundError(TranscodeError):
 TranscodeFunc = Callable[[Path, Path, Path, VariantProfile], None]
 
 
+@dataclass(frozen=True)
+class SourceColorInfo:
+    is_hdr: bool
+    transfer: str | None = None  # smpte2084 | arib-std-b67 | ...
+
+
 def transcode_profiles_for_asset(
     asset_type: AssetType,
     *,
-    renditions: list[dict[str, object]] | None,
-    source_width: int | None,
-    source_height: int | None,
+    renditions: list[dict[str, object]] | None = None,
+    source_width: int | None = None,
+    source_height: int | None = None,
+    source_is_hdr: bool = False,
 ) -> tuple[VariantProfile, ...]:
     if asset_type in {AssetType.video, AssetType.live_photo}:
         return video_renditions_from_config(
             renditions,
             source_width=source_width,
             source_height=source_height,
+            source_is_hdr=source_is_hdr,
         )
     raise TranscodeError(f"unsupported asset type: {asset_type}")
 
@@ -92,6 +102,7 @@ def run_transcode_job(
     derived_root: Path,
     config: object | None = None,
     ffmpeg_path: str = "ffmpeg",
+    ffprobe_path: str = "ffprobe",
     transcode_func: TranscodeFunc | None = None,
     live_video_generator: LiveVideoGenerator | None = None,
 ) -> list[AssetVariant]:
@@ -114,18 +125,23 @@ def run_transcode_job(
         except TypeError:
             renditions = None
 
+    source_color = _probe_source_color(source_path, ffprobe_path=ffprobe_path)
+
     profiles = transcode_profiles_for_asset(
         asset.type,
         renditions=renditions,
         source_width=asset.width,
         source_height=asset.height,
+        source_is_hdr=source_color.is_hdr,
     )
+
     transcoder = transcode_func or (
         lambda source, playlist, segment_pattern, profile: _transcode_profile(
             source,
             playlist,
             segment_pattern,
             profile,
+            source_color=source_color,
             ffmpeg_path=ffmpeg_path,
         )
     )
@@ -189,6 +205,7 @@ def _transcode_profile(
     segment_pattern: Path,
     profile: VariantProfile,
     *,
+    source_color: SourceColorInfo,
     ffmpeg_path: str,
     hls_time_seconds: int = DEFAULT_HLS_TIME_SECONDS,
 ) -> None:
@@ -203,62 +220,162 @@ def _transcode_profile(
 
     playlist_path.parent.mkdir(parents=True, exist_ok=True)
     segment_pattern.parent.mkdir(parents=True, exist_ok=True)
-    scale_filter = (
-        f"scale=w={profile.width}:h={profile.height}:force_original_aspect_ratio=decrease"
-    )
 
-    subprocess.run(
-        [
-            ffmpeg_path,
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-y",
-            "-i",
-            str(source_path),
-            "-map",
-            "0:v:0",
-            "-map",
-            "0:a:0?",
-            "-vf",
-            scale_filter,
+    # If the source is HDR but this rendition is SDR, tone-map to BT.709.
+    if source_color.is_hdr and not profile.hdr:
+        # Requires ffmpeg built with zscale/tonemap (libzimg).
+        # This produces an SDR-looking output rather than the washed-out HDR->SDR default.
+        scale_filter = (
+            f"scale=w={profile.width}:h={profile.height}:force_original_aspect_ratio=decrease"
+        )
+        vf = (
+            f"{scale_filter},"
+            "zscale=t=linear:npl=100,"
+            "tonemap=mobius:desat=0,"
+            "zscale=primaries=bt709:transfer=bt709:matrix=bt709:range=tv,"
+            "format=yuv420p"
+        )
+        vcodec_args = [
             "-c:v",
             "libx264",
             "-profile:v",
             "main",
-            "-preset",
-            "veryfast",
             "-pix_fmt",
             "yuv420p",
-            "-b:v",
-            f"{profile.video_bitrate_kbps}k",
-            "-maxrate",
-            f"{profile.video_bitrate_kbps}k",
-            "-bufsize",
-            f"{profile.video_bitrate_kbps * 2}k",
-            "-c:a",
-            "aac",
-            "-b:a",
-            f"{profile.audio_bitrate_kbps}k",
-            "-ac",
-            "2",
-            "-f",
-            "hls",
-            "-hls_time",
-            str(hls_time_seconds),
-            "-hls_playlist_type",
-            "vod",
-            "-hls_flags",
-            "independent_segments",
-            "-hls_segment_filename",
-            str(segment_pattern),
-            str(playlist_path),
-        ],
+            "-color_primaries",
+            "bt709",
+            "-color_trc",
+            "bt709",
+            "-colorspace",
+            "bt709",
+        ]
+    elif profile.hdr:
+        # HDR 4K rendition: encode 10-bit HEVC.
+        scale_filter = (
+            f"scale=w={profile.width}:h={profile.height}:force_original_aspect_ratio=decrease"
+        )
+        vf = f"{scale_filter},format=yuv420p10le"
+        # Preserve transfer characteristic hint if we detected it.
+        transfer = source_color.transfer or "smpte2084"
+        vcodec_args = [
+            "-c:v",
+            "libx265",
+            "-pix_fmt",
+            "yuv420p10le",
+            "-color_primaries",
+            "bt2020",
+            "-colorspace",
+            "bt2020nc",
+            "-color_trc",
+            transfer,
+        ]
+    else:
+        scale_filter = (
+            f"scale=w={profile.width}:h={profile.height}:force_original_aspect_ratio=decrease"
+        )
+        vf = scale_filter
+        vcodec_args = [
+            "-c:v",
+            "libx264",
+            "-profile:v",
+            "main",
+            "-pix_fmt",
+            "yuv420p",
+        ]
+
+    args: list[str] = [
+        ffmpeg_path,
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-i",
+        str(source_path),
+        "-map",
+        "0:v:0",
+        "-map",
+        "0:a:0?",
+        "-vf",
+        vf,
+        *vcodec_args,
+        "-preset",
+        "veryfast",
+        "-b:v",
+        f"{profile.video_bitrate_kbps}k",
+        "-maxrate",
+        f"{profile.video_bitrate_kbps}k",
+        "-bufsize",
+        f"{profile.video_bitrate_kbps * 2}k",
+        "-c:a",
+        "aac",
+        "-b:a",
+        f"{profile.audio_bitrate_kbps}k",
+        "-ac",
+        "2",
+        "-f",
+        "hls",
+        "-hls_time",
+        str(hls_time_seconds),
+        "-hls_playlist_type",
+        "vod",
+        "-hls_flags",
+        "independent_segments",
+        "-hls_segment_filename",
+        str(segment_pattern),
+        str(playlist_path),
+    ]
+
+    subprocess.run(
+        args,
         check=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
     )
+
+
+def _probe_source_color(source_path: Path, *, ffprobe_path: str = "ffprobe") -> SourceColorInfo:
+    if shutil.which(ffprobe_path) is None:
+        return SourceColorInfo(is_hdr=False, transfer=None)
+    try:
+        completed = subprocess.run(
+            [
+                ffprobe_path,
+                "-v",
+                "error",
+                "-print_format",
+                "json",
+                "-show_entries",
+                "stream=color_transfer,pix_fmt,codec_type",
+                str(source_path),
+            ],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        payload = json.loads(completed.stdout)
+    except Exception:
+        return SourceColorInfo(is_hdr=False, transfer=None)
+
+    streams = payload.get("streams")
+    if not isinstance(streams, list):
+        return SourceColorInfo(is_hdr=False, transfer=None)
+
+    for stream in streams:
+        if not isinstance(stream, dict):
+            continue
+        if stream.get("codec_type") != "video":
+            continue
+        transfer = stream.get("color_transfer")
+        pix_fmt = stream.get("pix_fmt")
+        transfer_str = transfer if isinstance(transfer, str) else None
+        pix_str = pix_fmt if isinstance(pix_fmt, str) else ""
+
+        is_hdr = transfer_str in {"smpte2084", "arib-std-b67"} or "10" in pix_str
+        return SourceColorInfo(is_hdr=is_hdr, transfer=transfer_str)
+
+    return SourceColorInfo(is_hdr=False, transfer=None)
 
 
 def _upsert_variant(session: Session, record: AssetVariant) -> AssetVariant:

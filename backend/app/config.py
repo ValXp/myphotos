@@ -87,7 +87,7 @@ class Config:
     webauthn: WebAuthnConfig
     app: AppConfig
     session: SessionConfig
-    media: MediaConfig
+    media: MediaConfig = MediaConfig(video_renditions=[])
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -198,6 +198,7 @@ def load_config(environ: Mapping[str, str] | None = None) -> Config:
             "height": 2160,
             "video_bitrate_kbps": 20000,
             "audio_bitrate_kbps": 256,
+            "hdr": True,
             "min_source_width": 3840,
             "min_source_height": 2160,
         },
