@@ -276,36 +276,82 @@ export function ViewerShell({
 
     playerRef.current = player;
 
-    // Add quality selector (VHS/hls). Plugin registers httpSourceSelector.
-    // We also reposition the selector to sit next to the fullscreen button.
-    // @ts-expect-error plugin adds method
-    if (typeof (player as any).httpSourceSelector === "function") {
-      // @ts-expect-error plugin adds method
-      (player as any).httpSourceSelector({ default: "auto" });
+    // Add an in-player quality selector next to fullscreen.
+    // We rely on videojs-contrib-quality-levels (VHS populates levels for HLS).
+    try {
+      const controlBar = player.getChild("controlBar") as any;
+      const fs = controlBar?.getChild?.("FullscreenToggle") as any;
+      const barEl = controlBar?.el?.();
+      const fsEl = fs?.el?.();
+      const qualityLevels = (player as any).qualityLevels?.();
 
-      // Move the selector button next to fullscreen (right side of the control bar).
-      try {
-        const controlBar = player.getChild("controlBar") as any;
-        const fs = controlBar?.getChild?.("FullscreenToggle") as any;
-        const selector =
-          controlBar?.getChild?.("SourceMenuButton") ??
-          controlBar?.getChild?.("HttpSourceSelector") ??
-          controlBar?.getChild?.("HttpSourceSelectorButton");
+      if (barEl && fsEl && qualityLevels) {
+        const wrapper = document.createElement("div");
+        wrapper.className = "vjs-quality-select vjs-control";
 
-        if (controlBar?.el && fs?.el && selector?.el) {
-          const barEl = controlBar.el();
-          const fsEl = fs.el();
-          const selEl = selector.el();
-          if (barEl && fsEl && selEl && fsEl.parentElement === barEl) {
-            barEl.insertBefore(selEl, fsEl);
+        const select = document.createElement("select");
+        select.className = "vjs-quality-select-control";
+        select.setAttribute("aria-label", "Quality");
+
+        const rebuildOptions = () => {
+          const levels: Array<{ index: number; height?: number }> = [];
+          for (let i = 0; i < qualityLevels.length; i += 1) {
+            const lvl = qualityLevels[i];
+            levels.push({ index: i, height: lvl?.height });
           }
-        }
-      } catch {
-        // ignore
-      }
-    }
+          // unique + sort by height
+          const unique = new Map<number, number>();
+          for (const lvl of levels) {
+            if (typeof lvl.height === "number" && !unique.has(lvl.height)) {
+              unique.set(lvl.height, lvl.index);
+            }
+          }
+          const heights = Array.from(unique.keys()).sort((a, b) => a - b);
 
-    // Video.js will render its own quality menu button (via http-source-selector).
+          select.innerHTML = "";
+          const autoOpt = document.createElement("option");
+          autoOpt.value = "auto";
+          autoOpt.textContent = "Auto";
+          select.appendChild(autoOpt);
+          for (const h of heights) {
+            const opt = document.createElement("option");
+            opt.value = String(h);
+            opt.textContent = `${h}p`;
+            select.appendChild(opt);
+          }
+        };
+
+        const applySelection = (value: string) => {
+          if (value === "auto") {
+            for (let i = 0; i < qualityLevels.length; i += 1) {
+              qualityLevels[i].enabled = true;
+            }
+            return;
+          }
+          const targetH = Number(value);
+          for (let i = 0; i < qualityLevels.length; i += 1) {
+            const lvl = qualityLevels[i];
+            lvl.enabled = lvl?.height === targetH;
+          }
+        };
+
+        select.addEventListener("change", () => {
+          applySelection(select.value);
+        });
+
+        rebuildOptions();
+        wrapper.appendChild(select);
+        barEl.insertBefore(wrapper, fsEl);
+
+        // Keep options up-to-date as levels appear.
+        if (typeof qualityLevels.on === "function") {
+          qualityLevels.on("addqualitylevel", rebuildOptions);
+          qualityLevels.on("removequalitylevel", rebuildOptions);
+        }
+      }
+    } catch {
+      // ignore
+    }
 
     return () => {
       try {
