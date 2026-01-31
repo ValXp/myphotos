@@ -200,8 +200,9 @@ describe("App flows", () => {
       await screen.findByLabelText(/video playback from jan 20, 2026/i)
     ).toBeInTheDocument();
     expect(container.querySelector("video")).toBeInTheDocument();
+    // video.js attaches sources dynamically; in tests we expose the intended URL.
     expect(
-      container.querySelector("video")?.getAttribute("src")
+      container.querySelector("video")?.getAttribute("data-stream-src")
     ).toContain("/public/shares/demo-token/assets/asset-public-video/stream");
 
     cleanup();

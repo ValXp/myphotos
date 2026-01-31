@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import Hls from "hls.js";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import videojs from "video.js";
+import "video.js/dist/video-js.css";
+import "videojs-contrib-quality-levels";
+import "videojs-http-source-selector";
 
 const ZOOM_LEVELS = [1, 1.5, 2, 3];
 const DEFAULT_ZOOM_INDEX = 0;
@@ -130,14 +133,7 @@ export function ViewerShell({
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedAssetId = searchParams.get("asset");
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const hlsRef = useRef<Hls | null>(null);
-  const [hlsLevels, setHlsLevels] = useState<Array<{
-    index: number;
-    width?: number;
-    height?: number;
-    bitrate?: number;
-  }>>([]);
-  const [hlsLevelIndex, setHlsLevelIndex] = useState<number>(-1); // -1 = auto
+  const playerRef = useRef<ReturnType<typeof videojs> | null>(null);
 
   const paramIndex = useMemo(() => {
     if (!selectedAssetId) {
@@ -244,22 +240,19 @@ export function ViewerShell({
       return;
     }
 
-    // Reset between selections.
-    // jsdom doesn't implement pause/load, so guard for tests.
-    if (typeof element.pause === "function") {
-      try {
-        element.pause();
-      } catch {
-        // ignore
-      }
+    // Avoid initializing video.js in unit tests (jsdom doesn't fully support media APIs).
+    if (import.meta.env.MODE === "test") {
+      return;
     }
-    element.removeAttribute("src");
-    if (typeof element.load === "function") {
+
+    // Dispose any previous player (asset switch / unmount).
+    if (playerRef.current) {
       try {
-        element.load();
+        playerRef.current.dispose();
       } catch {
         // ignore
       }
+      playerRef.current = null;
     }
 
     const source = videoSource;
@@ -267,63 +260,70 @@ export function ViewerShell({
       return;
     }
 
-    // HLS: Firefox (and most non-Safari browsers) need hls.js.
-    if (source.includes(".m3u8")) {
-      const canNativeHls =
-        typeof element.canPlayType === "function" &&
-        element.canPlayType("application/vnd.apple.mpegurl") !== "";
+    // Ensure the element has the video.js class.
+    element.classList.add("video-js");
+    element.classList.add("vjs-default-skin");
 
-      if (canNativeHls) {
-        element.src = source;
-        return;
-      }
+    const type = source.includes(".m3u8") ? "application/x-mpegURL" : "video/mp4";
 
-      if (Hls.isSupported()) {
-        const hls = new Hls({
-          enableWorker: true,
-          lowLatencyMode: false
-        });
-        hlsRef.current = hls;
-        hls.loadSource(source);
-        hls.attachMedia(element);
+    const player = videojs(element, {
+      controls: true,
+      preload: "metadata",
+      playsinline: true,
+      fluid: true,
+      sources: [{ src: source, type }]
+    });
 
-        const syncLevels = () => {
-          const levels = hls.levels.map((level, index) => ({
-            index,
-            width: level.width,
-            height: level.height,
-            bitrate: level.bitrate
-          }));
-          setHlsLevels(levels);
-        };
+    playerRef.current = player;
 
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          syncLevels();
-          // -1 represents auto in hls.js
-          setHlsLevelIndex(hls.currentLevel);
-        });
-
-        hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
-          if (typeof data?.level === "number") {
-            setHlsLevelIndex(data.level);
-          }
-        });
-
-        return () => {
-          hlsRef.current = null;
-          setHlsLevels([]);
-          setHlsLevelIndex(-1);
-          hls.destroy();
-        };
-      }
-
-      // No HLS support.
-      element.src = source;
-      return;
+    // Add quality selector (VHS/hls). Plugin registers httpSourceSelector.
+    // @ts-expect-error plugin adds method
+    if (typeof (player as any).httpSourceSelector === "function") {
+      // @ts-expect-error plugin adds method
+      (player as any).httpSourceSelector({ default: "auto" });
     }
 
-    // Progressive fallback.
-    element.src = source;
+    const updateQualityLabel = () => {
+      try {
+        const qualityLevels = (player as any).qualityLevels?.();
+        if (!qualityLevels || typeof qualityLevels.length !== "number") {
+          setQualityLabel(null);
+          return;
+        }
+        // When auto, video.js/VHS will enable multiple levels; otherwise one is enabled.
+        const enabled = [];
+        for (let i = 0; i < qualityLevels.length; i += 1) {
+          const lvl = qualityLevels[i];
+          if (lvl?.enabled) {
+            enabled.push(lvl);
+          }
+        }
+        if (enabled.length !== 1) {
+          setQualityLabel("Auto");
+          return;
+        }
+        const lvl = enabled[0];
+        const res = lvl?.height ? `${lvl.height}p` : "Quality";
+        setQualityLabel(res);
+      } catch {
+        setQualityLabel(null);
+      }
+    };
+
+    // Try to update label after manifests/level changes.
+    player.on("loadedmetadata", updateQualityLabel);
+    player.on("loadeddata", updateQualityLabel);
+    player.on("qualitylevelschange", updateQualityLabel);
+
+    return () => {
+      try {
+        player.dispose();
+      } catch {
+        // ignore
+      }
+      playerRef.current = null;
+      setQualityLabel(null);
+    };
   }, [isVideo, selectedAsset, videoSource]);
 
   const handleZoomIn = useCallback(() => {
@@ -338,32 +338,7 @@ export function ViewerShell({
     setZoomIndex(DEFAULT_ZOOM_INDEX);
   }, []);
 
-  const sortedHlsLevels = useMemo(() => {
-    return [...hlsLevels].sort((a, b) => (a.height ?? 0) - (b.height ?? 0));
-  }, [hlsLevels]);
-
-  const selectedHlsLabel = useMemo(() => {
-    if (!sortedHlsLevels.length) {
-      return null;
-    }
-    const level = sortedHlsLevels.find((candidate) => candidate.index === hlsLevelIndex);
-    if (!level) {
-      return hlsLevelIndex === -1 ? "Auto" : `Level ${hlsLevelIndex}`;
-    }
-    const res = level.height ? `${level.height}p` : "Unknown";
-    const bitrate = level.bitrate ? `${Math.round(level.bitrate / 1000)} kbps` : null;
-    return bitrate ? `${res} · ${bitrate}` : res;
-  }, [hlsLevelIndex, sortedHlsLevels]);
-
-  const handleHlsLevelChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
-    const value = Number(event.target.value);
-    const hls = hlsRef.current;
-    setHlsLevelIndex(value);
-    if (hls) {
-      // -1 = auto; otherwise index of hls.levels
-      hls.currentLevel = value;
-    }
-  }, []);
+  const [qualityLabel, setQualityLabel] = useState<string | null>(null);
 
   return (
     <section className="page viewer">
@@ -493,29 +468,11 @@ export function ViewerShell({
           {selectedAsset?.live_photo_video_id && <span className="pill">Live pairing</span>}
         </div>
 
-        {isVideo && sortedHlsLevels.length > 0 && (
+        {isVideo && (
           <div className="viewer-zoom" role="group" aria-label="Video quality">
             <span className="viewer-zoom-label">Quality</span>
             <div className="viewer-zoom-buttons">
-              <select
-                className="text-input"
-                value={hlsLevelIndex}
-                onChange={handleHlsLevelChange}
-                aria-label="Select video quality"
-              >
-                <option value={-1}>Auto</option>
-                {sortedHlsLevels.map((level) => {
-                  const label = level.height
-                    ? `${level.height}p${level.bitrate ? ` (${Math.round(level.bitrate / 1000)} kbps)` : ""}`
-                    : `Level ${level.index}`;
-                  return (
-                    <option key={level.index} value={level.index}>
-                      {label}
-                    </option>
-                  );
-                })}
-              </select>
-              {selectedHlsLabel && <span className="viewer-zoom-value">{selectedHlsLabel}</span>}
+              <span className="viewer-zoom-value">{qualityLabel ?? "Auto"}</span>
             </div>
           </div>
         )}
