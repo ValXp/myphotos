@@ -180,11 +180,18 @@ export async function registerPasskey(displayName: string): Promise<void> {
     publicKeyBytes = new Uint8Array([0]).buffer;
   }
 
+  let transports: string[] | undefined;
+  try {
+    transports = response.getTransports ? response.getTransports() : undefined;
+  } catch {
+    transports = undefined;
+  }
+
   const payload: RegistrationVerifyPayload = {
     credential_id: toBase64Url(credential.rawId),
     public_key: toBase64Url(publicKeyBytes),
     sign_count: 0,
-    transports: response.getTransports ? response.getTransports() : undefined,
+    transports,
     challenge: options.challenge,
     user_handle: options.user.id
   };
