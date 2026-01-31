@@ -277,43 +277,35 @@ export function ViewerShell({
     playerRef.current = player;
 
     // Add quality selector (VHS/hls). Plugin registers httpSourceSelector.
+    // We also reposition the selector to sit next to the fullscreen button.
     // @ts-expect-error plugin adds method
     if (typeof (player as any).httpSourceSelector === "function") {
       // @ts-expect-error plugin adds method
       (player as any).httpSourceSelector({ default: "auto" });
-    }
 
-    const updateQualityLabel = () => {
+      // Move the selector button next to fullscreen (right side of the control bar).
       try {
-        const qualityLevels = (player as any).qualityLevels?.();
-        if (!qualityLevels || typeof qualityLevels.length !== "number") {
-          setQualityLabel(null);
-          return;
-        }
-        // When auto, video.js/VHS will enable multiple levels; otherwise one is enabled.
-        const enabled = [];
-        for (let i = 0; i < qualityLevels.length; i += 1) {
-          const lvl = qualityLevels[i];
-          if (lvl?.enabled) {
-            enabled.push(lvl);
+        const controlBar = player.getChild("controlBar") as any;
+        const fs = controlBar?.getChild?.("FullscreenToggle") as any;
+        const selector =
+          controlBar?.getChild?.("SourceMenuButton") ??
+          controlBar?.getChild?.("HttpSourceSelector") ??
+          controlBar?.getChild?.("HttpSourceSelectorButton");
+
+        if (controlBar?.el && fs?.el && selector?.el) {
+          const barEl = controlBar.el();
+          const fsEl = fs.el();
+          const selEl = selector.el();
+          if (barEl && fsEl && selEl && fsEl.parentElement === barEl) {
+            barEl.insertBefore(selEl, fsEl);
           }
         }
-        if (enabled.length !== 1) {
-          setQualityLabel("Auto");
-          return;
-        }
-        const lvl = enabled[0];
-        const res = lvl?.height ? `${lvl.height}p` : "Quality";
-        setQualityLabel(res);
       } catch {
-        setQualityLabel(null);
+        // ignore
       }
-    };
+    }
 
-    // Try to update label after manifests/level changes.
-    player.on("loadedmetadata", updateQualityLabel);
-    player.on("loadeddata", updateQualityLabel);
-    player.on("qualitylevelschange", updateQualityLabel);
+    // Video.js will render its own quality menu button (via http-source-selector).
 
     return () => {
       try {
@@ -322,7 +314,6 @@ export function ViewerShell({
         // ignore
       }
       playerRef.current = null;
-      setQualityLabel(null);
     };
   }, [isVideo, selectedAsset, videoSource]);
 
@@ -468,14 +459,7 @@ export function ViewerShell({
           {selectedAsset?.live_photo_video_id && <span className="pill">Live pairing</span>}
         </div>
 
-        {isVideo && (
-          <div className="viewer-zoom" role="group" aria-label="Video quality">
-            <span className="viewer-zoom-label">Quality</span>
-            <div className="viewer-zoom-buttons">
-              <span className="viewer-zoom-value">{qualityLabel ?? "Auto"}</span>
-            </div>
-          </div>
-        )}
+        {/* Quality selector is rendered by video.js in the player control bar. */}
         {backLink && (
           <Link className="ghost" to={backLink.to}>
             {backLink.label}
