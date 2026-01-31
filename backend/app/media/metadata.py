@@ -120,11 +120,13 @@ def extract_metadata(
 
 
 def merge_metadata(exif: MetadataResult, ffprobe: MetadataResult) -> MetadataResult:
+    # Prefer exiftool for still image dimensions (HEICs can confuse ffprobe and report
+    # embedded thumbnail sizes). ffprobe remains authoritative for duration.
     return MetadataResult(
         captured_at=_coalesce(exif.captured_at, ffprobe.captured_at),
         duration_ms=_coalesce(ffprobe.duration_ms, exif.duration_ms),
-        width=_coalesce(ffprobe.width, exif.width),
-        height=_coalesce(ffprobe.height, exif.height),
+        width=_coalesce(exif.width, ffprobe.width),
+        height=_coalesce(exif.height, ffprobe.height),
         lat=_coalesce(exif.lat, ffprobe.lat),
         lon=_coalesce(exif.lon, ffprobe.lon),
     )

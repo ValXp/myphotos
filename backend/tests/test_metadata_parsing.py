@@ -70,11 +70,11 @@ class FfprobeParsingTest(unittest.TestCase):
             datetime(2020, 1, 2, 3, 4, 5, tzinfo=timezone.utc),
         )
 
-    def test_merge_metadata_prefers_ffprobe_dimensions(self) -> None:
+    def test_merge_metadata_prefers_exif_dimensions_when_present(self) -> None:
         exif = MetadataResult(width=100, height=200)
         ffprobe = MetadataResult(width=300, duration_ms=4000)
         merged = merge_metadata(exif, ffprobe)
-        self.assertEqual(merged.width, 300)
+        self.assertEqual(merged.width, 100)
         self.assertEqual(merged.height, 200)
         self.assertEqual(merged.duration_ms, 4000)
 

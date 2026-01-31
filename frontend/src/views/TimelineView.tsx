@@ -8,6 +8,7 @@ import { ViewerShell } from "./ViewerShell";
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 const PAGE_SIZE = 60;
 const THUMB_PROFILE = "thumb_md";
+const VIEWER_PROFILE = "thumb_lg";
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -196,6 +197,10 @@ function formatTypeLabel(type: AssetType): string {
 
 function thumbnailUrl(assetId: string): string {
   return buildApiUrl(`/assets/${assetId}/thumb?profile=${THUMB_PROFILE}`);
+}
+
+function viewerPhotoUrl(assetId: string): string {
+  return buildApiUrl(`/assets/${assetId}/thumb?profile=${VIEWER_PROFILE}`);
 }
 
 function originalUrl(assetId: string): string {
@@ -847,7 +852,7 @@ export function TimelineView() {
               error={error}
               nextCursor={nextCursor}
               previewUrl={thumbnailUrl}
-              photoUrl={originalUrl}
+              photoUrl={viewerPhotoUrl}
               streamUrl={streamUrl}
               backLink={{ to: "/app/timeline", label: "Back to timeline" }}
             />

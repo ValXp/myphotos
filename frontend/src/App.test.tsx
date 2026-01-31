@@ -284,7 +284,7 @@ describe("App flows", () => {
     });
     expect(photoImg).toHaveAttribute(
       "src",
-      expect.stringContaining("/assets/asset-owner-photo/original")
+      expect.stringContaining("/assets/asset-owner-photo/thumb?profile=thumb_lg")
     );
     expect(container.querySelector("video")).not.toBeInTheDocument();
 
