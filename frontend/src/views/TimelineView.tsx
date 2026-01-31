@@ -43,6 +43,15 @@ type AssetSummary = {
   width: number | null;
   height: number | null;
   live_photo_video_id: string | null;
+  ready?: {
+    thumb: boolean;
+    stream: boolean;
+  };
+  processing?: {
+    metadata: boolean;
+    thumb: boolean;
+    transcode: boolean;
+  };
 };
 
 type AssetsResponse = {
@@ -1017,6 +1026,20 @@ export function TimelineView() {
             const isLivePhoto = asset.type === "live_photo" && !!asset.live_photo_video_id;
             const livePreviewSrc = isLivePhoto ? liveVideoUrl(asset.id) : null;
 
+            const isVideo = asset.type === "video";
+            const needsThumb = !asset.ready?.thumb;
+            const needsTranscode = isVideo && !asset.ready?.stream;
+            const isProcessing = !!asset.processing?.thumb || !!asset.processing?.transcode;
+            const statusLabel = needsTranscode
+              ? asset.processing?.transcode
+                ? "Transcoding"
+                : "Queued for transcode"
+              : needsThumb
+                ? asset.processing?.thumb
+                  ? "Generating thumbnail"
+                  : "Queued for thumbnail"
+                : null;
+
             return (
               <article
                 key={asset.id}
@@ -1052,6 +1075,12 @@ export function TimelineView() {
                     alt={thumbAlt}
                     loading="lazy"
                   />
+                  {(needsThumb || needsTranscode) && (
+                    <div className="media-processing" aria-label={statusLabel ?? "Processing"}>
+                      <span className="spinner" aria-hidden="true" />
+                      {statusLabel && <span className="media-processing-label">{statusLabel}</span>}
+                    </div>
+                  )}
                   {isLivePhoto && (
                     <video
                       ref={registerVideoRef(asset.id)}

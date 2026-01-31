@@ -8,14 +8,15 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response, StreamingResponse
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import get_config, get_db, require_owner_session
 from app.auth.sessions import Session as OwnerSession
 from app.config import Config
 from app.db.enums import AssetType, AssetVariantKind
-from app.db.models import Asset, AssetVariant
+from app.db.enums import JobStatus, JobType
+from app.db.models import Asset, AssetVariant, Job
 from app.media.transcode import master_manifest_path
 
 
@@ -96,9 +97,48 @@ def list_assets(
             )
         )
     rows = query.limit(limit + 1).all()
-    items = []
-    for asset, _ in rows[:limit]:
-        items.append(_serialize_asset_summary(asset))
+    page_rows = rows[:limit]
+
+    assets = [asset for asset, _ in page_rows]
+    asset_ids = [asset.id for asset in assets if asset.id]
+
+    variants_by_asset: dict[str, list[AssetVariant]] = {}
+    if asset_ids:
+        variant_rows = (
+            db.execute(
+                select(AssetVariant)
+                .where(AssetVariant.asset_id.in_(asset_ids))
+            )
+            .scalars()
+            .all()
+        )
+        for variant in variant_rows:
+            variants_by_asset.setdefault(variant.asset_id, []).append(variant)
+
+    active_jobs_by_asset: dict[str, set[str]] = {}
+    if asset_ids:
+        asset_id_expr = Job.payload["asset_id"].as_string()
+        job_rows = (
+            db.execute(
+                select(Job.type, Job.status, asset_id_expr)
+                .where(
+                    Job.type.in_([JobType.metadata, JobType.thumb, JobType.transcode]),
+                    Job.status.in_([JobStatus.queued, JobStatus.running]),
+                    asset_id_expr.in_(asset_ids),
+                )
+            )
+            .all()
+        )
+        for job_type, _, asset_id in job_rows:
+            if not asset_id:
+                continue
+            active_jobs_by_asset.setdefault(asset_id, set()).add(job_type.value)
+
+    items: list[dict[str, object]] = []
+    for asset in assets:
+        variants = variants_by_asset.get(asset.id, [])
+        active = active_jobs_by_asset.get(asset.id, set())
+        items.append(_serialize_asset_summary(asset, variants=variants, active_jobs=active))
     next_cursor = None
     if len(rows) > limit:
         last_asset, last_sort_ts = rows[limit - 1]
@@ -268,7 +308,26 @@ def get_asset_live_video(
     )
 
 
-def _serialize_asset_summary(asset: Asset) -> dict[str, object]:
+def _serialize_asset_summary(
+    asset: Asset,
+    *,
+    variants: list[AssetVariant] | None = None,
+    active_jobs: set[str] | None = None,
+) -> dict[str, object]:
+    variants = variants or []
+    active_jobs = active_jobs or set()
+
+    def has_variant(kind: AssetVariantKind, profile: str | None = None) -> bool:
+        for variant in variants:
+            if variant.kind != kind:
+                continue
+            if profile is None or variant.profile == profile:
+                return True
+        return False
+
+    has_thumb = has_variant(AssetVariantKind.thumb, "thumb_md")
+    has_stream = has_variant(AssetVariantKind.video_transcode)
+
     return {
         "id": asset.id,
         "type": asset.type,
@@ -278,6 +337,15 @@ def _serialize_asset_summary(asset: Asset) -> dict[str, object]:
         "width": asset.width,
         "height": asset.height,
         "live_photo_video_id": asset.live_photo_video_id,
+        "ready": {
+            "thumb": has_thumb,
+            "stream": has_stream,
+        },
+        "processing": {
+            "metadata": "metadata" in active_jobs,
+            "thumb": "thumb" in active_jobs,
+            "transcode": "transcode" in active_jobs,
+        },
     }
 
 
