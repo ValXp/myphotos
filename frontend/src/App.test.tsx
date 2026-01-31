@@ -550,6 +550,19 @@ describe("App flows", () => {
 
     const fetchMock = vi.fn().mockImplementation((input: RequestInfo) => {
       const url = typeof input === "string" ? input : input.url;
+      if (url.includes("/admin/index/overview")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => ({
+            scan: { status: "idle", job_id: null },
+            assets: { count: 0 },
+            jobs: { metadata: {}, thumb: {}, transcode: {} },
+            active_jobs: 0
+          })
+        });
+      }
       const payload = url.includes("/albums") ? albumPayload : assetPayload;
       return Promise.resolve({
         ok: true,
@@ -590,6 +603,19 @@ describe("App flows", () => {
     const assetUrls: string[] = [];
     const fetchMock = vi.fn().mockImplementation((input: RequestInfo) => {
       const url = typeof input === "string" ? input : input.url;
+      if (url.includes("/admin/index/overview")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => ({
+            scan: { status: "idle", job_id: null },
+            assets: { count: 0 },
+            jobs: { metadata: {}, thumb: {}, transcode: {} },
+            active_jobs: 0
+          })
+        });
+      }
       if (url.includes("/assets?")) {
         assetUrls.push(url);
         return Promise.resolve({

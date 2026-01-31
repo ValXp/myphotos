@@ -65,14 +65,32 @@ type AlbumsResponse = {
 type ScanStatus = {
   status: string;
   job_id: string | null;
+  roots?: string[];
+  stats?: {
+    scanned: number;
+    supported: number;
+    created: number;
+    updated: number;
+    unchanged: number;
+    errors: string[];
+  } | null;
   started_at?: string | null;
   finished_at?: string | null;
-  scanned_files?: number | null;
-  discovered_files?: number | null;
-  enqueued_assets?: number | null;
-  error?: {
-    message?: string;
-  } | null;
+  backoff_until?: string | null;
+  error?: unknown;
+};
+
+type OverviewPayload = {
+  scan: ScanStatus;
+  assets: {
+    count: number;
+  };
+  jobs: {
+    metadata: Record<string, number>;
+    thumb: Record<string, number>;
+    transcode: Record<string, number>;
+  };
+  active_jobs: number;
 };
 
 type AlbumItemsResponse = {
@@ -414,6 +432,7 @@ export function TimelineView() {
   const [scanPath, setScanPath] = useState<string>("iphone_17_val");
   const [scanStatus, setScanStatus] = useState<ScanStatus | null>(null);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
+  const [overview, setOverview] = useState<OverviewPayload | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const inFlightRef = useRef(false);
@@ -564,6 +583,28 @@ export function TimelineView() {
     }
   }, [refreshSession, selectedAlbumId, selectedIds]);
 
+  const fetchOverview = useCallback(async () => {
+    try {
+      const data = await requestJson<OverviewPayload>("/admin/index/overview", {
+        method: "GET"
+      });
+      setOverview(data);
+      setScanStatus(data.scan);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        await refreshSession();
+      }
+    }
+  }, [refreshSession]);
+
+  useEffect(() => {
+    void fetchOverview();
+    const interval = window.setInterval(() => {
+      void fetchOverview();
+    }, 2000);
+    return () => window.clearInterval(interval);
+  }, [fetchOverview]);
+
   const runScan = useCallback(async () => {
     setIsScanning(true);
     setScanMessage(null);
@@ -581,6 +622,7 @@ export function TimelineView() {
       );
       setScanStatus(data);
       setScanMessage("Scan started.");
+      void fetchOverview();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to start scan.";
       setScanMessage(message);
@@ -590,7 +632,7 @@ export function TimelineView() {
     } finally {
       setIsScanning(false);
     }
-  }, [refreshSession, scanPath]);
+  }, [fetchOverview, refreshSession, scanPath]);
 
   const handleRefresh = useCallback(() => {
     void loadAssets(null, "initial", activeFilters);
@@ -919,10 +961,25 @@ export function TimelineView() {
         </div>
       )}
 
-      {scanMessage && (
+      {(scanMessage || overview) && (
         <div className="status" role="status">
-          {scanMessage}
-          {scanStatus?.job_id ? ` (job ${scanStatus.job_id})` : ""}
+          {scanMessage && (
+            <span>
+              {scanMessage}
+              {scanStatus?.job_id ? ` (job ${scanStatus.job_id})` : ""}
+            </span>
+          )}
+          {overview?.scan?.status && (
+            <span>
+              {scanMessage ? " · " : ""}
+              Scan: {overview.scan.status}
+              {overview.scan.stats
+                ? ` (created ${overview.scan.stats.created}, updated ${overview.scan.stats.updated})`
+                : ""}
+              {` · Assets: ${overview.assets.count}`}
+              {` · Jobs active: ${overview.active_jobs}`}
+            </span>
+          )}
         </div>
       )}
       {filterError && (

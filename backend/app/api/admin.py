@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Query, Response
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -14,6 +15,8 @@ from app.api.deps import (
 )
 from app.auth.sessions import Session as OwnerSession
 from app.config import Config
+from app.db.enums import JobStatus, JobType
+from app.db.models import Asset, Job
 from app.ingest.admin import (
     ScanBackoffError,
     ScanBackoffPolicy,
@@ -65,6 +68,75 @@ def scan_status(
 ) -> dict[str, object]:
     job = latest_scan_job(db)
     return scan_status_payload(job)
+
+
+@router.get("/overview")
+def index_overview(
+    _: OwnerSession = Depends(require_owner_session),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    """Lightweight admin status endpoint for UI polling.
+
+    Returns scan status + counts of assets and jobs by type/status.
+    """
+
+    scan_job = latest_scan_job(db)
+    scan = scan_status_payload(scan_job)
+
+    asset_count = db.execute(select(func.count()).select_from(Asset)).scalar_one()
+
+    # Job counts.
+    rows = db.execute(
+        select(Job.type, Job.status, func.count())
+        .where(Job.type.in_([JobType.metadata, JobType.thumb, JobType.transcode]))
+        .group_by(Job.type, Job.status)
+    ).all()
+
+    counts: dict[str, dict[str, int]] = {}
+    for job_type, job_status, count in rows:
+        type_key = job_type.value if job_type else "unknown"
+        status_key = job_status.value if job_status else "unknown"
+        counts.setdefault(type_key, {})[status_key] = int(count)
+
+    def get_count(job_type: str, status: JobStatus) -> int:
+        return counts.get(job_type, {}).get(status.value, 0)
+
+    job_summary = {
+        "metadata": {
+            "queued": get_count("metadata", JobStatus.queued),
+            "running": get_count("metadata", JobStatus.running),
+            "done": get_count("metadata", JobStatus.done),
+            "failed": get_count("metadata", JobStatus.failed),
+        },
+        "thumb": {
+            "queued": get_count("thumb", JobStatus.queued),
+            "running": get_count("thumb", JobStatus.running),
+            "done": get_count("thumb", JobStatus.done),
+            "failed": get_count("thumb", JobStatus.failed),
+        },
+        "transcode": {
+            "queued": get_count("transcode", JobStatus.queued),
+            "running": get_count("transcode", JobStatus.running),
+            "done": get_count("transcode", JobStatus.done),
+            "failed": get_count("transcode", JobStatus.failed),
+        },
+    }
+
+    active_jobs = (
+        job_summary["metadata"]["queued"]
+        + job_summary["metadata"]["running"]
+        + job_summary["thumb"]["queued"]
+        + job_summary["thumb"]["running"]
+        + job_summary["transcode"]["queued"]
+        + job_summary["transcode"]["running"]
+    )
+
+    return {
+        "scan": scan,
+        "assets": {"count": int(asset_count)},
+        "jobs": job_summary,
+        "active_jobs": int(active_jobs),
+    }
 
 
 def _resolve_roots(config: Config, paths: list[str] | None) -> list[Path]:
