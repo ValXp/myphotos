@@ -13,6 +13,7 @@ from sqlalchemy import (
     Index,
     Integer,
     LargeBinary,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -90,7 +91,8 @@ class Asset(Base):
     original_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     original_mime: Mapped[str] = mapped_column(String(255), nullable=False)
     original_device: Mapped[int | None] = mapped_column(BigInteger)
-    original_inode: Mapped[int | None] = mapped_column(BigInteger)
+    # st_ino is an unsigned 64-bit value on Linux and can exceed signed BIGINT.
+    original_inode: Mapped[int | None] = mapped_column(Numeric(20, 0, asdecimal=False))
     original_mtime_ns: Mapped[int | None] = mapped_column(BigInteger)
     live_photo_video_id: Mapped[str | None] = mapped_column(
         String(36),
