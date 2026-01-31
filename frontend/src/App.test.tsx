@@ -256,6 +256,14 @@ describe("App flows", () => {
           json: async () => assetsPayload
         });
       }
+      if (url.includes("/albums")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => ({ items: [] })
+        });
+      }
       return Promise.resolve({
         ok: true,
         status: 200,
@@ -266,7 +274,7 @@ describe("App flows", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const { container } = render(
-      <MemoryRouter initialEntries={["/app/viewer?asset=asset-owner-photo"]}>
+      <MemoryRouter initialEntries={["/app/timeline?viewer=1&asset=asset-owner-photo"]}>
         <App />
       </MemoryRouter>
     );
@@ -283,7 +291,7 @@ describe("App flows", () => {
     cleanup();
 
     render(
-      <MemoryRouter initialEntries={["/app/viewer?asset=asset-owner-video"]}>
+      <MemoryRouter initialEntries={["/app/timeline?viewer=1&asset=asset-owner-video"]}>
         <App />
       </MemoryRouter>
     );

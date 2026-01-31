@@ -1,7 +1,9 @@
 import type { ChangeEvent, CSSProperties } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useLivePhotoHover } from "../hooks/useLivePhotoHover";
+import { ViewerShell } from "./ViewerShell";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 const PAGE_SIZE = 60;
@@ -196,6 +198,14 @@ function thumbnailUrl(assetId: string): string {
   return buildApiUrl(`/assets/${assetId}/thumb?profile=${THUMB_PROFILE}`);
 }
 
+function originalUrl(assetId: string): string {
+  return buildApiUrl(`/assets/${assetId}/original`);
+}
+
+function streamUrl(assetId: string): string {
+  return buildApiUrl(`/assets/${assetId}/stream`);
+}
+
 function liveVideoUrl(assetId: string): string {
   return buildApiUrl(`/assets/${assetId}/live`);
 }
@@ -386,6 +396,9 @@ export function TimelineView() {
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const inFlightRef = useRef(false);
   const { registerVideoRef, handleMouseEnter, handleMouseLeave } = useLivePhotoHover();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const viewerOpen = searchParams.get("viewer") === "1";
 
   const loadAssets = useCallback(
     async (cursor: string | null, mode: "initial" | "more", filters: ActiveFilters) => {
@@ -567,6 +580,40 @@ export function TimelineView() {
     setActiveFilters({});
   }, []);
 
+  const openViewer = useCallback(
+    (assetId: string) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("asset", assetId);
+        next.set("viewer", "1");
+        return next;
+      });
+    },
+    [setSearchParams]
+  );
+
+  const closeViewer = useCallback(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("viewer");
+      next.delete("asset");
+      return next;
+    });
+  }, [setSearchParams]);
+
+  useEffect(() => {
+    if (!viewerOpen) {
+      return;
+    }
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeViewer();
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [closeViewer, viewerOpen]);
+
   useEffect(() => {
     void loadAssets(null, "initial", activeFilters);
   }, [activeFilters, loadAssets]);
@@ -624,7 +671,7 @@ export function TimelineView() {
 
   return (
     <section className="page">
-      <header className="page-header">
+      <header className="page-header timeline-header">
         <div>
           <p className="eyebrow">Owner timeline</p>
           <h1>Timeline</h1>
@@ -776,6 +823,38 @@ export function TimelineView() {
           </div>
         </div>
       </header>
+
+      {viewerOpen && (
+        <div className="viewer-overlay" onClick={closeViewer} role="dialog" aria-modal="true">
+          <div className="viewer-overlay-panel" onClick={(event) => event.stopPropagation()}>
+            <button className="viewer-overlay-close ghost" onClick={closeViewer}>
+              Close
+            </button>
+            <ViewerShell
+              contextLabel="Owner timeline"
+              emptyMessage="No assets loaded."
+              emptySubhead="Pick an asset from the timeline."
+              items={items}
+              status={
+                status === "loading" || status === "loading-more"
+                  ? "loading"
+                  : status === "ready"
+                    ? "ready"
+                    : status === "error"
+                      ? "error"
+                      : "idle"
+              }
+              error={error}
+              nextCursor={nextCursor}
+              previewUrl={thumbnailUrl}
+              photoUrl={originalUrl}
+              streamUrl={streamUrl}
+              backLink={{ to: "/app/timeline", label: "Back to timeline" }}
+            />
+          </div>
+        </div>
+      )}
+
       {filterError && (
         <div className="status error" role="alert">
           {filterError}
@@ -833,10 +912,20 @@ export function TimelineView() {
               >
                 <div
                   className={`media-thumb${isLivePhoto ? " live-photo-thumb" : ""}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openViewer(asset.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      openViewer(asset.id);
+                    }
+                  }}
                   onMouseEnter={isLivePhoto ? () => handleMouseEnter(asset.id) : undefined}
                   onMouseLeave={isLivePhoto ? () => handleMouseLeave(asset.id) : undefined}
+                  aria-label={`Open ${typeLabel.toLowerCase()} viewer`}
                 >
-                  <label className="media-select">
+                  <label className="media-select" onClick={(event) => event.stopPropagation()}>
                     <input
                       type="checkbox"
                       checked={isSelected}

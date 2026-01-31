@@ -6,7 +6,7 @@ import { PublicAlbumView } from "./views/PublicAlbumView";
 import { PublicViewerView } from "./views/PublicViewerView";
 import { SignInView } from "./views/SignInView";
 import { TimelineView } from "./views/TimelineView";
-import { ViewerView } from "./views/ViewerView";
+// Viewer is rendered as an overlay from TimelineView.
 
 function AuthGate() {
   const { status } = useAuth();
@@ -55,12 +55,6 @@ function OwnerLayout() {
             className={({ isActive }) => (isActive ? "active" : "")}
           >
             Albums
-          </NavLink>
-          <NavLink
-            to="/app/viewer"
-            className={({ isActive }) => (isActive ? "active" : "")}
-          >
-            Viewer
           </NavLink>
         </nav>
         <button className="ghost" onClick={() => void signOut()}>
@@ -116,7 +110,7 @@ export default function App() {
             <Route path="timeline" element={<TimelineView />} />
             <Route path="albums" element={<AlbumsView />} />
             <Route path="albums/:albumId" element={<AlbumDetailView />} />
-            <Route path="viewer" element={<ViewerView />} />
+            {/* Viewer is shown as an overlay from the timeline. */}
           </Route>
         </Route>
         <Route path="/share/:token" element={<PublicLayout />}>
