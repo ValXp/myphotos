@@ -130,9 +130,15 @@ export async function logout(): Promise<void> {
 }
 
 export async function registerPasskey(displayName: string): Promise<void> {
+  console.log("passkey.register.step", "request_options");
   const options = await requestJson<RegistrationOptionsResponse>("/auth/webauthn/register/options", {
     method: "POST",
     body: JSON.stringify({ display_name: displayName })
+  });
+  console.log("passkey.register.step", "options_ok", {
+    rp: options.rp,
+    timeout: options.timeout,
+    attestation: options.attestation,
   });
 
   const publicKey: PublicKeyCredentialCreationOptions = {
@@ -153,13 +159,29 @@ export async function registerPasskey(displayName: string): Promise<void> {
     }))
   };
 
-  const credential = (await navigator.credentials.create({
-    publicKey
-  })) as PublicKeyCredential | null;
+  console.log("passkey.register.step", "calling_navigator_credentials_create");
+  let credential: PublicKeyCredential | null = null;
+  try {
+    credential = (await navigator.credentials.create({
+      publicKey
+    })) as PublicKeyCredential | null;
+  } catch (err) {
+    console.error("passkey.register.step", "navigator_credentials_create_failed", err);
+    throw err;
+  }
+  console.log("passkey.register.step", "credential_create_returned", {
+    hasCredential: !!credential,
+  });
 
   if (!credential) {
     throw new Error("Passkey creation was canceled.");
   }
+
+  console.log("passkey.register.step", "credential_ok", {
+    type: credential.type,
+    id: credential.id,
+    rawIdBytes: credential.rawId?.byteLength,
+  });
 
   const response = credential.response as AuthenticatorAttestationResponse & {
     getPublicKey?: () => ArrayBuffer | null;
@@ -177,13 +199,20 @@ export async function registerPasskey(displayName: string): Promise<void> {
   // Our server does not currently validate attestation signatures, and the login
   // flow only relies on credential_id + sign_count. Store a placeholder.
   if (!publicKeyBytes) {
+    console.log("passkey.register.step", "no_getPublicKey_available_using_placeholder");
     publicKeyBytes = new Uint8Array([0]).buffer;
+  } else {
+    console.log("passkey.register.step", "got_public_key_bytes", {
+      publicKeyBytes: publicKeyBytes.byteLength,
+    });
   }
 
   let transports: string[] | undefined;
   try {
     transports = response.getTransports ? response.getTransports() : undefined;
-  } catch {
+    console.log("passkey.register.step", "got_transports", { transports });
+  } catch (err) {
+    console.warn("passkey.register.step", "getTransports_failed", err);
     transports = undefined;
   }
 
@@ -196,11 +225,14 @@ export async function registerPasskey(displayName: string): Promise<void> {
     user_handle: options.user.id
   };
 
+  console.log("passkey.register.step", "posting_register_verify");
   await requestJson<StatusResponse>("/auth/webauthn/register/verify", {
     method: "POST",
     body: JSON.stringify(payload)
   });
+  console.log("passkey.register.step", "register_verify_ok");
 }
+
 
 export async function signInWithPasskey(): Promise<void> {
   const options = await requestJson<LoginOptionsResponse>("/auth/webauthn/login/options", {
