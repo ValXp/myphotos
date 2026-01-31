@@ -19,7 +19,8 @@ function describeError(error: unknown): string {
     if (error.name === "NotSupportedError") {
       return "Passkeys are not supported in this browser.";
     }
-    return error.message || "Passkey request failed.";
+    const suffix = error.message ? `: ${error.message}` : "";
+    return `${error.name}${suffix}` || "Passkey request failed.";
   }
   if (error instanceof Error) {
     return error.message;
@@ -49,6 +50,8 @@ export function SignInView() {
       await registerPasskey(trimmedName);
       setNotice("Passkey created. Sign in to continue.");
     } catch (err) {
+      // Helpful when diagnosing browser-specific WebAuthn failures.
+      console.error("passkey.register.error", err);
       setError(describeError(err));
     } finally {
       setBusyAction(null);
