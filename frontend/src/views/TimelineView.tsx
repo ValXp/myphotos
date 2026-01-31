@@ -913,7 +913,7 @@ export function TimelineView() {
               previewUrl={thumbnailUrl}
               photoUrl={viewerPhotoUrl}
               streamUrl={streamUrl}
-              backLink={{ to: "/app/timeline", label: "Back to timeline" }}
+              showFooterNav={false}
             />
           </div>
         </div>

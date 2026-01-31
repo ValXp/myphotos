@@ -49,6 +49,7 @@ type ViewerShellProps = {
     to: string;
     label: string;
   };
+  showFooterNav?: boolean;
 };
 
 function assetTimestamp(asset: ViewerAsset): Date | null {
@@ -122,7 +123,8 @@ export function ViewerShell({
   previewUrl,
   photoUrl,
   streamUrl,
-  backLink
+  backLink,
+  showFooterNav = true
 }: ViewerShellProps) {
   const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -364,51 +366,53 @@ export function ViewerShell({
             </button>
           </div>
         </div>
-        <div className="viewer-controls">
-          <div className="viewer-nav">
-            <button className="ghost" onClick={handlePrev} disabled={!canPrev}>
-              Prev
-            </button>
-            <div className="viewer-count">
-              {selectedIndex >= 0 ? `${selectedIndex + 1} of ${items.length}` : "No assets loaded"}
-            </div>
-            <button className="ghost" onClick={handleNext} disabled={!canNext}>
-              Next
-            </button>
-          </div>
-          <div className="viewer-zoom">
-            <span className="viewer-zoom-label">Zoom</span>
-            <div className="viewer-zoom-buttons">
-              <button
-                className="ghost viewer-zoom-btn"
-                onClick={handleZoomOut}
-                disabled={!canZoomOut}
-                aria-label="Zoom out"
-              >
-                -
+        {showFooterNav && (
+          <div className="viewer-controls">
+            <div className="viewer-nav">
+              <button className="ghost" onClick={handlePrev} disabled={!canPrev}>
+                Prev
               </button>
-              <span className="viewer-zoom-value" aria-live="polite">
-                {zoomLabel}
-              </span>
-              <button
-                className="ghost viewer-zoom-btn"
-                onClick={handleZoomIn}
-                disabled={!canZoomIn}
-                aria-label="Zoom in"
-              >
-                +
-              </button>
-              <button
-                className="ghost viewer-zoom-btn"
-                onClick={handleZoomReset}
-                disabled={!canResetZoom}
-                aria-label="Reset zoom"
-              >
-                Fit
+              <div className="viewer-count">
+                {selectedIndex >= 0 ? `${selectedIndex + 1} of ${items.length}` : "No assets loaded"}
+              </div>
+              <button className="ghost" onClick={handleNext} disabled={!canNext}>
+                Next
               </button>
             </div>
+            <div className="viewer-zoom">
+              <span className="viewer-zoom-label">Zoom</span>
+              <div className="viewer-zoom-buttons">
+                <button
+                  className="ghost viewer-zoom-btn"
+                  onClick={handleZoomOut}
+                  disabled={!canZoomOut}
+                  aria-label="Zoom out"
+                >
+                  -
+                </button>
+                <span className="viewer-zoom-value" aria-live="polite">
+                  {zoomLabel}
+                </span>
+                <button
+                  className="ghost viewer-zoom-btn"
+                  onClick={handleZoomIn}
+                  disabled={!canZoomIn}
+                  aria-label="Zoom in"
+                >
+                  +
+                </button>
+                <button
+                  className="ghost viewer-zoom-btn"
+                  onClick={handleZoomReset}
+                  disabled={!canResetZoom}
+                  aria-label="Reset zoom"
+                >
+                  Fit
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
         {nextCursor && hasItems && (
           <p className="hint">More assets are available in the timeline.</p>
         )}

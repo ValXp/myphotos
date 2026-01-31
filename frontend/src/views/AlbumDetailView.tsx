@@ -553,6 +553,7 @@ export function AlbumDetailView() {
               previewUrl={thumbnailUrl}
               photoUrl={viewerPhotoUrl}
               streamUrl={streamUrl}
+              showFooterNav={false}
             />
           </div>
         </div>
