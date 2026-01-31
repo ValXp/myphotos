@@ -451,13 +451,13 @@ export function TimelineView() {
   const viewerOpen = searchParams.get("viewer") === "1";
 
   const loadAssets = useCallback(
-    async (cursor: string | null, mode: "initial" | "more", filters: ActiveFilters) => {
+    async (cursor: string | null, mode: "initial" | "more" | "poll", filters: ActiveFilters) => {
       if (inFlightRef.current) {
         return;
       }
       inFlightRef.current = true;
       setError(null);
-      setStatus(mode === "initial" ? "loading" : "loading-more");
+      setStatus(mode === "initial" ? "loading" : mode === "more" ? "loading-more" : status);
       if (mode === "initial") {
         setItems([]);
         setNextCursor(null);
@@ -467,8 +467,15 @@ export function TimelineView() {
       }
       try {
         const data = await fetchAssets(cursor, filters);
-        setItems((prev) => (mode === "initial" ? data.items : [...prev, ...data.items]));
-        setNextCursor(data.next_cursor ?? null);
+        if (mode === "poll") {
+          setItems((prev) => {
+            const nextById = new Map(data.items.map((asset) => [asset.id, asset]));
+            return prev.map((asset) => nextById.get(asset.id) ?? asset);
+          });
+        } else {
+          setItems((prev) => (mode === "initial" ? data.items : [...prev, ...data.items]));
+          setNextCursor(data.next_cursor ?? null);
+        }
         setStatus("ready");
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unable to load timeline.";
@@ -481,7 +488,7 @@ export function TimelineView() {
         inFlightRef.current = false;
       }
     },
-    [refreshSession]
+    [refreshSession, status]
   );
 
   const loadAlbums = useCallback(async () => {
@@ -708,6 +715,18 @@ export function TimelineView() {
   useEffect(() => {
     void loadAssets(null, "initial", activeFilters);
   }, [activeFilters, loadAssets]);
+
+  // Live-update processing/ready status while background jobs are active.
+  useEffect(() => {
+    if (!overview || overview.active_jobs <= 0) {
+      return;
+    }
+    const interval = window.setInterval(() => {
+      void loadAssets(null, "poll", activeFilters);
+      void fetchOverview();
+    }, 2000);
+    return () => window.clearInterval(interval);
+  }, [activeFilters, fetchOverview, loadAssets, overview]);
 
   useEffect(() => {
     void loadAlbums();
