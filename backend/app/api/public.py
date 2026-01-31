@@ -156,6 +156,39 @@ def get_public_asset_stream(
     db: Session = Depends(get_db),
     config: Config = Depends(get_config),
 ) -> Response:
+    """Back-compat: stream file selection via query param (?file=...)."""
+    asset = (
+        db.query(Asset)
+        .join(AlbumItem, AlbumItem.asset_id == Asset.id)
+        .filter(AlbumItem.album_id == share.album_id, Asset.id == asset_id)
+        .one_or_none()
+    )
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    if asset.type not in {AssetType.video, AssetType.live_photo}:
+        raise HTTPException(status_code=404, detail="stream not found")
+    stream_path = _resolve_stream_path(asset_id, config.paths.derived, file)
+    media_type = _stream_media_type(stream_path)
+    return _build_file_response(
+        stream_path,
+        request,
+        media_type=media_type,
+        cache_control=STREAM_CACHE_CONTROL,
+        enable_range=True,
+        missing_detail="stream not found",
+    )
+
+
+@router.get("/{token}/assets/{asset_id}/stream/{file}")
+def get_public_asset_stream_file(
+    asset_id: str,
+    file: str,
+    request: Request,
+    share: ShareLink = Depends(require_share_link),
+    db: Session = Depends(get_db),
+    config: Config = Depends(get_config),
+) -> Response:
+    """HLS-friendly path-based stream file endpoint."""
     asset = (
         db.query(Asset)
         .join(AlbumItem, AlbumItem.asset_id == Asset.id)

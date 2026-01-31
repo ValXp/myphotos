@@ -186,6 +186,38 @@ def get_asset_stream(
     config: Config = Depends(get_config),
     _: OwnerSession = Depends(require_owner_session),
 ) -> Response:
+    """Back-compat: stream file selection via query param (?file=...)."""
+    asset = db.query(Asset).filter(Asset.id == asset_id).one_or_none()
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    if asset.type not in {AssetType.video, AssetType.live_photo}:
+        raise HTTPException(status_code=404, detail="stream not found")
+    stream_path = _resolve_stream_path(asset_id, config.paths.derived, file)
+    media_type = _stream_media_type(stream_path)
+    return _build_file_response(
+        stream_path,
+        request,
+        media_type=media_type,
+        cache_control=STREAM_CACHE_CONTROL,
+        enable_range=True,
+        missing_detail="stream not found",
+    )
+
+
+@router.get("/assets/{asset_id}/stream/{file}")
+def get_asset_stream_file(
+    asset_id: str,
+    file: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    config: Config = Depends(get_config),
+    _: OwnerSession = Depends(require_owner_session),
+) -> Response:
+    """HLS-friendly path-based stream file endpoint.
+
+    This allows master.m3u8 to reference variant playlists and segments with relative
+    paths (e.g. 720p.m3u8, 720p_000.ts).
+    """
     asset = db.query(Asset).filter(Asset.id == asset_id).one_or_none()
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
