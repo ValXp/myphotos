@@ -472,11 +472,25 @@ export function TimelineView() {
           setItems((prev) => {
             const nextById = new Map(data.items.map((asset) => [asset.id, asset]));
             // Only update fields that affect processing indicators to reduce UI churn.
-            return prev.map((asset) => {
+            let changed = false;
+            const nextItems = prev.map((asset) => {
               const next = nextById.get(asset.id);
               if (!next) {
                 return asset;
               }
+
+              const same =
+                JSON.stringify(asset.ready ?? null) === JSON.stringify(next.ready ?? null) &&
+                JSON.stringify(asset.processing ?? null) === JSON.stringify(next.processing ?? null) &&
+                asset.duration_ms === next.duration_ms &&
+                asset.width === next.width &&
+                asset.height === next.height;
+
+              if (same) {
+                return asset;
+              }
+
+              changed = true;
               return {
                 ...asset,
                 ready: next.ready,
@@ -486,6 +500,7 @@ export function TimelineView() {
                 height: next.height
               };
             });
+            return changed ? nextItems : prev;
           });
           return;
         }
@@ -620,8 +635,30 @@ export function TimelineView() {
       const data = await requestJson<OverviewPayload>("/admin/index/overview", {
         method: "GET"
       });
-      setOverview(data);
-      setScanStatus(data.scan);
+      setOverview((prev) => {
+        // Avoid re-render churn when nothing meaningful changed.
+        if (!prev) {
+          return data;
+        }
+        const same =
+          prev.active_jobs === data.active_jobs &&
+          prev.assets.count === data.assets.count &&
+          prev.scan.status === data.scan.status &&
+          prev.scan.job_id === data.scan.job_id &&
+          JSON.stringify(prev.jobs) === JSON.stringify(data.jobs) &&
+          JSON.stringify(prev.scan.stats ?? null) === JSON.stringify(data.scan.stats ?? null);
+        return same ? prev : data;
+      });
+      setScanStatus((prev) => {
+        if (!prev) {
+          return data.scan;
+        }
+        const same =
+          prev.status === data.scan.status &&
+          prev.job_id === data.scan.job_id &&
+          JSON.stringify(prev.stats ?? null) === JSON.stringify(data.scan.stats ?? null);
+        return same ? prev : data.scan;
+      });
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         await refreshSession();
@@ -633,7 +670,7 @@ export function TimelineView() {
     void fetchOverview();
     const interval = window.setInterval(() => {
       void fetchOverview();
-    }, 2000);
+    }, 5000);
     return () => window.clearInterval(interval);
   }, [fetchOverview]);
 
@@ -745,8 +782,7 @@ export function TimelineView() {
     }
     const interval = window.setInterval(() => {
       void loadAssets(null, "poll", activeFilters);
-      // overview already polls elsewhere
-    }, 3000);
+    }, 5000);
     return () => window.clearInterval(interval);
   }, [activeFilters, loadAssets, overview]);
 
