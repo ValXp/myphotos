@@ -429,7 +429,7 @@ export function TimelineView() {
   );
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>({});
   const [filterError, setFilterError] = useState<string | null>(null);
-  const [scanPath, setScanPath] = useState<string>("iphone_17_val");
+  const [scanPath, setScanPath] = useState<string>("iphone_17_val_sample_videos");
   const [scanStatus, setScanStatus] = useState<ScanStatus | null>(null);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [overview, setOverview] = useState<OverviewPayload | null>(null);
@@ -975,6 +975,9 @@ export function TimelineView() {
               Scan: {overview.scan.status}
               {overview.scan.stats
                 ? ` (created ${overview.scan.stats.created}, updated ${overview.scan.stats.updated})`
+                : ""}
+              {overview.scan.stats?.errors?.length
+                ? ` · Scan errors: ${overview.scan.stats.errors.slice(0, 1).join("")}`
                 : ""}
               {` · Assets: ${overview.assets.count}`}
               {` · Jobs active: ${overview.active_jobs}`}
