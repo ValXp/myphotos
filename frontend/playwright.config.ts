@@ -1,11 +1,14 @@
 import { defineConfig } from '@playwright/test';
 
 const BACKEND_PORT = 8000;
+const E2E_DB = 'myphotos_e2e';
 
 export default defineConfig({
   testDir: './e2e',
-  timeout: 90_000,
-  expect: { timeout: 10_000 },
+  // Keep e2e deterministic by running serially.
+  workers: 1,
+  timeout: 120_000,
+  expect: { timeout: 15_000 },
   use: {
     // Serve the built frontend bundle from the backend so WebAuthn and API calls
     // are same-origin (avoids CORS/proxy complexity in tests).
@@ -18,20 +21,23 @@ export default defineConfig({
     command: [
       'bash -lc',
       '"'
-        + 'cd ../frontend && npm run build && '
-        + 'cd ../backend && '
-        + 'source ../.venv/bin/activate && '
-        + `DB_URL=postgresql+psycopg://myphotos:myphotos@localhost:5432/myphotos `
-        + `REDIS_URL=redis://localhost:6379/0 `
-        + `APP_HOST=127.0.0.1 APP_PORT=${BACKEND_PORT} APP_ENV=development `
-        + 'FRONTEND_DIST_DIR=../frontend/dist '
-        + 'WEBAUTHN_RP_ID=localhost '
-        + `WEBAUTHN_ORIGINS=\\\"http://localhost:${BACKEND_PORT}\\\" `
+        + `su - postgres -c \\\"dropdb --if-exists ${E2E_DB}; createdb -O myphotos ${E2E_DB}\\\" && `
+        + 'cd .. && '
+        + 'cd frontend && npm run build && cd .. && '
+        + 'source .venv/bin/activate && '
+        + `export DB_URL=postgresql+psycopg://myphotos:myphotos@localhost:5432/${E2E_DB} && `
+        + 'export REDIS_URL=redis://localhost:6379/0 && '
+        + `export APP_HOST=127.0.0.1 APP_PORT=${BACKEND_PORT} APP_ENV=development && `
+        + 'export FRONTEND_DIST_DIR=../frontend/dist && '
+        + 'export WEBAUTHN_RP_ID=localhost && '
+        + `export WEBAUTHN_ORIGINS=\\\"http://localhost:${BACKEND_PORT}\\\" && `
+        + './migrate up && '
+        + 'cd backend && '
         + `uvicorn app.api.app:app --host 127.0.0.1 --port ${BACKEND_PORT}`
         + '"',
     ].join(' '),
     url: `http://localhost:${BACKEND_PORT}/ready`,
     reuseExistingServer: true,
-    timeout: 180_000,
+    timeout: 240_000,
   },
 });

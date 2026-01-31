@@ -1,10 +1,9 @@
 import { test, expect } from '@playwright/test';
 
 async function addVirtualAuthenticator(page: any) {
-  // Playwright exposes CDP for Chromium-based browsers.
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('WebAuthn.enable');
-  const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', {
+  await cdp.send('WebAuthn.addVirtualAuthenticator', {
     options: {
       protocol: 'ctap2',
       transport: 'internal',
@@ -14,15 +13,12 @@ async function addVirtualAuthenticator(page: any) {
       automaticPresenceSimulation: true,
     },
   });
-  return { cdp, authenticatorId };
 }
 
-test('register + login with passkey (virtual authenticator)', async ({ page }) => {
+test('register + login then navigate owner shell', async ({ page }) => {
   await addVirtualAuthenticator(page);
 
   await page.goto('/app/timeline', { waitUntil: 'domcontentloaded' });
-
-  // Sign-in screen should be present.
   await expect(page.getByRole('heading', { name: 'Unlock your library' })).toBeVisible();
 
   // Register the first owner passkey.
@@ -32,7 +28,18 @@ test('register + login with passkey (virtual authenticator)', async ({ page }) =
   // Login using that passkey.
   await page.getByRole('button', { name: 'Sign in with passkey' }).click();
 
-  // After login, we should see the owner shell.
+  // Owner layout.
   await expect(page.getByRole('heading', { name: 'Owner console' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Timeline' })).toBeVisible();
+
+  // Timeline route.
+  await page.getByRole('link', { name: 'Timeline' }).click();
+  await expect(page).toHaveURL(/\/app\/timeline$/);
+
+  // Albums route.
+  await page.getByRole('link', { name: 'Albums' }).click();
+  await expect(page).toHaveURL(/\/app\/albums$/);
+
+  // Viewer route.
+  await page.getByRole('link', { name: 'Viewer' }).click();
+  await expect(page).toHaveURL(/\/app\/viewer$/);
 });
