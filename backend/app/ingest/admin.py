@@ -57,9 +57,16 @@ class ScanFailedError(ScanError):
 
 
 def latest_scan_job(session: Session) -> Job | None:
-    return session.execute(
-        select(Job).where(Job.type == JobType.scan).order_by(Job.created_at.desc())
-    ).scalar_one_or_none()
+    return (
+        session.execute(
+            select(Job)
+            .where(Job.type == JobType.scan)
+            .order_by(Job.created_at.desc())
+            .limit(1)
+        )
+        .scalars()
+        .first()
+    )
 
 
 def scan_status_payload(job: Job | None) -> dict[str, object]:
