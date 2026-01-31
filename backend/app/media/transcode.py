@@ -12,10 +12,10 @@ from app.db.enums import AssetType, AssetVariantKind
 from app.db.models import Asset, AssetVariant
 from app.media.live_video import LiveVideoGenerator, run_live_video_job
 from app.media.variants import (
-    VIDEO_RENDITION_PROFILES,
     VariantProfile,
     build_variant_record,
     variant_output_path,
+    video_renditions_from_config,
 )
 
 DEFAULT_HLS_TIME_SECONDS = 4
@@ -36,9 +36,19 @@ class TranscodeNotFoundError(TranscodeError):
 TranscodeFunc = Callable[[Path, Path, Path, VariantProfile], None]
 
 
-def transcode_profiles_for_asset(asset_type: AssetType) -> tuple[VariantProfile, ...]:
+def transcode_profiles_for_asset(
+    asset_type: AssetType,
+    *,
+    renditions: list[dict[str, object]] | None,
+    source_width: int | None,
+    source_height: int | None,
+) -> tuple[VariantProfile, ...]:
     if asset_type in {AssetType.video, AssetType.live_photo}:
-        return VIDEO_RENDITION_PROFILES
+        return video_renditions_from_config(
+            renditions,
+            source_width=source_width,
+            source_height=source_height,
+        )
     raise TranscodeError(f"unsupported asset type: {asset_type}")
 
 
@@ -80,6 +90,7 @@ def run_transcode_job(
     asset_id: str,
     *,
     derived_root: Path,
+    config: object | None = None,
     ffmpeg_path: str = "ffmpeg",
     transcode_func: TranscodeFunc | None = None,
     live_video_generator: LiveVideoGenerator | None = None,
@@ -96,7 +107,19 @@ def run_transcode_job(
     if not source_path.exists():
         raise TranscodeError(f"file not found: {source_path}")
 
-    profiles = transcode_profiles_for_asset(asset.type)
+    renditions = None
+    if config is not None and hasattr(config, "media") and hasattr(config.media, "video_renditions"):
+        try:
+            renditions = list(config.media.video_renditions)
+        except TypeError:
+            renditions = None
+
+    profiles = transcode_profiles_for_asset(
+        asset.type,
+        renditions=renditions,
+        source_width=asset.width,
+        source_height=asset.height,
+    )
     transcoder = transcode_func or (
         lambda source, playlist, segment_pattern, profile: _transcode_profile(
             source,

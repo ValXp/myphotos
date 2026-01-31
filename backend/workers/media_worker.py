@@ -81,6 +81,7 @@ class MediaWorker:
                 session,
                 asset_id,
                 derived_root=self._config.paths.derived,
+                config=self._config,
                 ffmpeg_path=ffmpeg_path,
                 transcode_func=transcode_func,
                 live_video_generator=live_video_generator,

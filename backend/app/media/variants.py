@@ -37,7 +37,7 @@ LIVE_VIDEO_PROFILE = VariantProfile(
     "mp4",
 )
 
-VIDEO_RENDITION_PROFILES: tuple[VariantProfile, ...] = (
+DEFAULT_VIDEO_RENDITION_PROFILES: tuple[VariantProfile, ...] = (
     VariantProfile(
         "360p",
         AssetVariantKind.video_transcode,
@@ -72,10 +72,66 @@ def profiles_for_asset_type(asset_type: AssetType) -> tuple[VariantProfile, ...]
     if asset_type == AssetType.photo:
         return THUMBNAIL_PROFILES
     if asset_type == AssetType.video:
-        return THUMBNAIL_PROFILES + (VIDEO_POSTER_PROFILE,) + VIDEO_RENDITION_PROFILES
+        return THUMBNAIL_PROFILES + (VIDEO_POSTER_PROFILE,) + DEFAULT_VIDEO_RENDITION_PROFILES
     if asset_type == AssetType.live_photo:
-        return THUMBNAIL_PROFILES + (LIVE_VIDEO_PROFILE,) + VIDEO_RENDITION_PROFILES
+        return THUMBNAIL_PROFILES + (LIVE_VIDEO_PROFILE,) + DEFAULT_VIDEO_RENDITION_PROFILES
     raise ValueError(f"Unsupported asset type: {asset_type}")
+
+
+def video_renditions_from_config(
+    renditions: list[dict[str, object]] | None,
+    *,
+    source_width: int | None,
+    source_height: int | None,
+) -> tuple[VariantProfile, ...]:
+    """Build transcode rendition profiles from config.
+
+    Rendition dict schema:
+      name, width, height, video_bitrate_kbps, audio_bitrate_kbps
+      min_source_width (optional), min_source_height (optional)
+
+    A rendition with min_source_* is only included if the source dimensions are known
+    and meet the minimum.
+    """
+
+    if not renditions:
+        return DEFAULT_VIDEO_RENDITION_PROFILES
+
+    profiles: list[VariantProfile] = []
+    for rendition in renditions:
+        name = str(rendition.get("name") or "").strip()
+        width = rendition.get("width")
+        height = rendition.get("height")
+        video_bitrate_kbps = rendition.get("video_bitrate_kbps")
+        audio_bitrate_kbps = rendition.get("audio_bitrate_kbps")
+        if not name or not isinstance(width, int) or not isinstance(height, int):
+            continue
+        if not isinstance(video_bitrate_kbps, int) or not isinstance(audio_bitrate_kbps, int):
+            continue
+
+        min_w = rendition.get("min_source_width")
+        min_h = rendition.get("min_source_height")
+        if isinstance(min_w, int) or isinstance(min_h, int):
+            if source_width is None or source_height is None:
+                continue
+            if isinstance(min_w, int) and source_width < min_w:
+                continue
+            if isinstance(min_h, int) and source_height < min_h:
+                continue
+
+        profiles.append(
+            VariantProfile(
+                name,
+                AssetVariantKind.video_transcode,
+                "m3u8",
+                width=width,
+                height=height,
+                video_bitrate_kbps=video_bitrate_kbps,
+                audio_bitrate_kbps=audio_bitrate_kbps,
+            )
+        )
+
+    return tuple(profiles) if profiles else DEFAULT_VIDEO_RENDITION_PROFILES
 
 
 def variant_output_path(derived_root: Path, asset_id: str, profile: VariantProfile) -> Path:

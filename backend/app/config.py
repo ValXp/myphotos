@@ -60,6 +60,26 @@ class SessionConfig:
 
 
 @dataclass(frozen=True)
+class MediaConfig:
+    """Media/transcoding settings.
+
+    video_renditions is a list of dicts with keys:
+    - name: str
+    - width: int
+    - height: int
+    - video_bitrate_kbps: int
+    - audio_bitrate_kbps: int
+    - min_source_width (optional): int
+    - min_source_height (optional): int
+
+    If min_source_* is provided, the rendition is only generated when the source
+    dimensions meet or exceed the minimum.
+    """
+
+    video_renditions: list[dict[str, Any]]
+
+
+@dataclass(frozen=True)
 class Config:
     paths: PathsConfig
     database: DatabaseConfig
@@ -67,6 +87,7 @@ class Config:
     webauthn: WebAuthnConfig
     app: AppConfig
     session: SessionConfig
+    media: MediaConfig
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -98,6 +119,9 @@ class Config:
             "session": {
                 "ttl_seconds": self.session.ttl_seconds,
                 "cookie_name": self.session.cookie_name,
+            },
+            "media": {
+                "video_renditions": self.media.video_renditions,
             },
         }
 
@@ -146,6 +170,43 @@ def load_config(environ: Mapping[str, str] | None = None) -> Config:
         cookie_name=_str_from_env(env, "SESSION_COOKIE_NAME", DEFAULT_SESSION_COOKIE_NAME),
     )
 
+    default_video_renditions: list[dict[str, Any]] = [
+        {
+            "name": "360p",
+            "width": 640,
+            "height": 360,
+            "video_bitrate_kbps": 800,
+            "audio_bitrate_kbps": 96,
+        },
+        {
+            "name": "720p",
+            "width": 1280,
+            "height": 720,
+            "video_bitrate_kbps": 2800,
+            "audio_bitrate_kbps": 128,
+        },
+        {
+            "name": "1080p",
+            "width": 1920,
+            "height": 1080,
+            "video_bitrate_kbps": 5000,
+            "audio_bitrate_kbps": 192,
+        },
+        {
+            "name": "2160p",
+            "width": 3840,
+            "height": 2160,
+            "video_bitrate_kbps": 20000,
+            "audio_bitrate_kbps": 256,
+            "min_source_width": 3840,
+            "min_source_height": 2160,
+        },
+    ]
+
+    media = MediaConfig(
+        video_renditions=_json_from_env(env, "VIDEO_RENDITIONS", default_video_renditions),
+    )
+
     return Config(
         paths=PathsConfig(
             data_root=data_root,
@@ -158,6 +219,7 @@ def load_config(environ: Mapping[str, str] | None = None) -> Config:
         webauthn=webauthn,
         app=app,
         session=session,
+        media=media,
     )
 
 
@@ -251,6 +313,18 @@ def _csv_from_env(env: Mapping[str, str], key: str, default: Sequence[str]) -> l
         seen.add(value)
         deduped.append(value)
     return deduped
+
+
+def _json_from_env(env: Mapping[str, str], key: str, default: object) -> object:
+    raw = env.get(key)
+    if raw is None:
+        return default
+    if not raw.strip():
+        raise ConfigError(f"{key} must not be empty")
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ConfigError(f"{key} must be valid JSON") from exc
 
 
 def _validate_unique_paths(paths: Sequence[tuple[str, Path]]) -> None:

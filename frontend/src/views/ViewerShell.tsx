@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Hls from "hls.js";
 import { Link, useSearchParams } from "react-router-dom";
 
@@ -130,6 +130,14 @@ export function ViewerShell({
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedAssetId = searchParams.get("asset");
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const hlsRef = useRef<Hls | null>(null);
+  const [hlsLevels, setHlsLevels] = useState<Array<{
+    index: number;
+    width?: number;
+    height?: number;
+    bitrate?: number;
+  }>>([]);
+  const [hlsLevelIndex, setHlsLevelIndex] = useState<number>(-1); // -1 = auto
 
   const paramIndex = useMemo(() => {
     if (!selectedAssetId) {
@@ -275,9 +283,36 @@ export function ViewerShell({
           enableWorker: true,
           lowLatencyMode: false
         });
+        hlsRef.current = hls;
         hls.loadSource(source);
         hls.attachMedia(element);
+
+        const syncLevels = () => {
+          const levels = hls.levels.map((level, index) => ({
+            index,
+            width: level.width,
+            height: level.height,
+            bitrate: level.bitrate
+          }));
+          setHlsLevels(levels);
+        };
+
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          syncLevels();
+          // -1 represents auto in hls.js
+          setHlsLevelIndex(hls.currentLevel);
+        });
+
+        hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
+          if (typeof data?.level === "number") {
+            setHlsLevelIndex(data.level);
+          }
+        });
+
         return () => {
+          hlsRef.current = null;
+          setHlsLevels([]);
+          setHlsLevelIndex(-1);
           hls.destroy();
         };
       }
@@ -301,6 +336,33 @@ export function ViewerShell({
 
   const handleZoomReset = useCallback(() => {
     setZoomIndex(DEFAULT_ZOOM_INDEX);
+  }, []);
+
+  const sortedHlsLevels = useMemo(() => {
+    return [...hlsLevels].sort((a, b) => (a.height ?? 0) - (b.height ?? 0));
+  }, [hlsLevels]);
+
+  const selectedHlsLabel = useMemo(() => {
+    if (!sortedHlsLevels.length) {
+      return null;
+    }
+    const level = sortedHlsLevels.find((candidate) => candidate.index === hlsLevelIndex);
+    if (!level) {
+      return hlsLevelIndex === -1 ? "Auto" : `Level ${hlsLevelIndex}`;
+    }
+    const res = level.height ? `${level.height}p` : "Unknown";
+    const bitrate = level.bitrate ? `${Math.round(level.bitrate / 1000)} kbps` : null;
+    return bitrate ? `${res} · ${bitrate}` : res;
+  }, [hlsLevelIndex, sortedHlsLevels]);
+
+  const handleHlsLevelChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    const value = Number(event.target.value);
+    const hls = hlsRef.current;
+    setHlsLevelIndex(value);
+    if (hls) {
+      // -1 = auto; otherwise index of hls.levels
+      hls.currentLevel = value;
+    }
   }, []);
 
   return (
@@ -412,6 +474,32 @@ export function ViewerShell({
                 </button>
               </div>
             </div>
+            {isVideo && sortedHlsLevels.length > 0 && (
+              <div className="viewer-zoom">
+                <span className="viewer-zoom-label">Quality</span>
+                <div className="viewer-zoom-buttons">
+                  <select
+                    className="text-input"
+                    value={hlsLevelIndex}
+                    onChange={handleHlsLevelChange}
+                    aria-label="Select video quality"
+                  >
+                    <option value={-1}>Auto</option>
+                    {sortedHlsLevels.map((level) => {
+                      const label = level.height
+                        ? `${level.height}p${level.bitrate ? ` (${Math.round(level.bitrate / 1000)} kbps)` : ""}`
+                        : `Level ${level.index}`;
+                      return (
+                        <option key={level.index} value={level.index}>
+                          {label}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  {selectedHlsLabel && <span className="viewer-zoom-value">{selectedHlsLabel}</span>}
+                </div>
+              </div>
+            )}
           </div>
         )}
         {nextCursor && hasItems && (
