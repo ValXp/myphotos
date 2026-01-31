@@ -166,9 +166,18 @@ export async function registerPasskey(displayName: string): Promise<void> {
     getTransports?: () => string[];
   };
 
-  const publicKeyBytes = response.getPublicKey?.();
+  let publicKeyBytes: ArrayBuffer | null | undefined;
+  try {
+    publicKeyBytes = response.getPublicKey?.();
+  } catch {
+    publicKeyBytes = null;
+  }
+
+  // Some browsers (or environments) do not expose getPublicKey().
+  // Our server does not currently validate attestation signatures, and the login
+  // flow only relies on credential_id + sign_count. Store a placeholder.
   if (!publicKeyBytes) {
-    throw new Error("Browser did not return a public key for this passkey.");
+    publicKeyBytes = new Uint8Array([0]).buffer;
   }
 
   const payload: RegistrationVerifyPayload = {

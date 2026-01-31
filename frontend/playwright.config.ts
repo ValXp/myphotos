@@ -37,7 +37,7 @@ export default defineConfig({
         + '"',
     ].join(' '),
     url: `http://localhost:${BACKEND_PORT}/ready`,
-    reuseExistingServer: true,
+    reuseExistingServer: false,
     timeout: 240_000,
   },
 });
