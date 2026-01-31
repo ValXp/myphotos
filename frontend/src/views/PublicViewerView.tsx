@@ -57,7 +57,7 @@ function publicThumbnailUrl(token: string, assetId: string): string {
 function publicStreamUrl(token: string, assetId: string): string {
   const safeToken = encodeURIComponent(token);
   const safeId = encodeURIComponent(assetId);
-  return buildApiUrl(`/public/shares/${safeToken}/assets/${safeId}/stream`);
+  return buildApiUrl(`/public/shares/${safeToken}/assets/${safeId}/stream?file=master.m3u8`);
 }
 
 export function PublicViewerView() {

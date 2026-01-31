@@ -197,7 +197,7 @@ function viewerPhotoUrl(assetId: string): string {
 }
 
 function streamUrl(assetId: string): string {
-  return buildApiUrl(`/assets/${assetId}/stream`);
+  return buildApiUrl(`/assets/${assetId}/stream?file=master.m3u8`);
 }
 
 function liveVideoUrl(assetId: string): string {
