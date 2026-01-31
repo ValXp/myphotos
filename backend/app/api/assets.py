@@ -115,7 +115,8 @@ def list_assets(
         for variant in variant_rows:
             variants_by_asset.setdefault(variant.asset_id, []).append(variant)
 
-    active_jobs_by_asset: dict[str, set[str]] = {}
+    # Track job status per asset so the UI can distinguish queued vs running.
+    active_jobs_by_asset: dict[str, dict[str, set[JobStatus]]] = {}
     if asset_ids:
         asset_id_expr = Job.payload["asset_id"].as_string()
         job_rows = (
@@ -129,15 +130,15 @@ def list_assets(
             )
             .all()
         )
-        for job_type, _, asset_id in job_rows:
-            if not asset_id:
+        for job_type, job_status, asset_id in job_rows:
+            if not asset_id or not job_type or not job_status:
                 continue
-            active_jobs_by_asset.setdefault(asset_id, set()).add(job_type.value)
+            active_jobs_by_asset.setdefault(asset_id, {}).setdefault(job_type.value, set()).add(job_status)
 
     items: list[dict[str, object]] = []
     for asset in assets:
         variants = variants_by_asset.get(asset.id, [])
-        active = active_jobs_by_asset.get(asset.id, set())
+        active = active_jobs_by_asset.get(asset.id, {})
         items.append(_serialize_asset_summary(asset, variants=variants, active_jobs=active))
     next_cursor = None
     if len(rows) > limit:
@@ -312,10 +313,21 @@ def _serialize_asset_summary(
     asset: Asset,
     *,
     variants: list[AssetVariant] | None = None,
-    active_jobs: set[str] | None = None,
+    # Mapping of job type -> set of active statuses (queued/running).
+    active_jobs: dict[str, set[JobStatus]] | None = None,
 ) -> dict[str, object]:
     variants = variants or []
-    active_jobs = active_jobs or set()
+    active_jobs = active_jobs or {}
+
+    def job_state(job_type: str) -> str | None:
+        statuses = active_jobs.get(job_type)
+        if not statuses:
+            return None
+        if JobStatus.running in statuses:
+            return "running"
+        if JobStatus.queued in statuses:
+            return "queued"
+        return None
 
     def has_variant(kind: AssetVariantKind, profile: str | None = None) -> bool:
         for variant in variants:
@@ -342,9 +354,9 @@ def _serialize_asset_summary(
             "stream": has_stream,
         },
         "processing": {
-            "metadata": "metadata" in active_jobs,
-            "thumb": "thumb" in active_jobs,
-            "transcode": "transcode" in active_jobs,
+            "metadata": job_state("metadata"),
+            "thumb": job_state("thumb"),
+            "transcode": job_state("transcode"),
         },
     }
 

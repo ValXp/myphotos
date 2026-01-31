@@ -34,6 +34,8 @@ class ApiError extends Error {
 
 type AssetType = "photo" | "video" | "live_photo";
 
+type ProcessingState = "queued" | "running" | null;
+
 type AssetSummary = {
   id: string;
   type: AssetType;
@@ -48,9 +50,9 @@ type AssetSummary = {
     stream: boolean;
   };
   processing?: {
-    metadata: boolean;
-    thumb: boolean;
-    transcode: boolean;
+    metadata: ProcessingState;
+    thumb: ProcessingState;
+    transcode: ProcessingState;
   };
 };
 
@@ -1134,15 +1136,22 @@ export function TimelineView() {
             const isVideo = asset.type === "video";
             const needsThumb = !asset.ready?.thumb;
             const needsTranscode = isVideo && !asset.ready?.stream;
-            const isProcessing = !!asset.processing?.thumb || !!asset.processing?.transcode;
+
+            const transcodeState = asset.processing?.transcode ?? null;
+            const thumbState = asset.processing?.thumb ?? null;
+
             const statusLabel = needsTranscode
-              ? asset.processing?.transcode
+              ? transcodeState === "running"
                 ? "Transcoding"
-                : "Queued for transcode"
+                : transcodeState === "queued"
+                  ? "Queued for transcode"
+                  : "Waiting for transcode"
               : needsThumb
-                ? asset.processing?.thumb
+                ? thumbState === "running"
                   ? "Generating thumbnail"
-                  : "Queued for thumbnail"
+                  : thumbState === "queued"
+                    ? "Queued for thumbnail"
+                    : "Waiting for thumbnail"
                 : null;
 
             return (
