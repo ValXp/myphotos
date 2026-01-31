@@ -459,7 +459,11 @@ export function TimelineView() {
       }
       inFlightRef.current = true;
       setError(null);
-      setStatus(mode === "initial" ? "loading" : mode === "more" ? "loading-more" : status);
+      if (mode === "initial") {
+        setStatus("loading");
+      } else if (mode === "more") {
+        setStatus("loading-more");
+      }
       if (mode === "initial") {
         setItems([]);
         setNextCursor(null);
@@ -520,7 +524,7 @@ export function TimelineView() {
         inFlightRef.current = false;
       }
     },
-    [refreshSession, status]
+    [refreshSession]
   );
 
   const loadAlbums = useCallback(async () => {
