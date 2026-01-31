@@ -669,11 +669,20 @@ export function TimelineView() {
 
   useEffect(() => {
     void fetchOverview();
+  }, [fetchOverview]);
+
+  useEffect(() => {
+    if (!liveUpdates) {
+      return;
+    }
     const interval = window.setInterval(() => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
       void fetchOverview();
     }, 5000);
     return () => window.clearInterval(interval);
-  }, [fetchOverview]);
+  }, [fetchOverview, liveUpdates]);
 
   const runScan = useCallback(async () => {
     setIsScanning(true);
