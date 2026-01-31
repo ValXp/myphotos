@@ -5,3 +5,4 @@ psycopg[binary]>=3.2
 pyvips>=2.2
 redis>=5.0
 sqlalchemy>=2.0
+webauthn>=2.7.0

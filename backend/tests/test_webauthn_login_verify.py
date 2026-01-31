@@ -2,6 +2,7 @@ import base64
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -74,13 +75,33 @@ class LoginVerifyTest(unittest.TestCase):
         self.assertIsNotNone(login_session_id)
 
         verify_payload = {
-            "credential_id": _encode(b"cred-1"),
-            "challenge": options_payload["challenge"],
-            "sign_count": 2,
+            "credential": {
+                "id": _encode(b"cred-1"),
+                "rawId": _encode(b"cred-1"),
+                "type": "public-key",
+                "response": {
+                    "clientDataJSON": _encode(b"client"),
+                    "authenticatorData": _encode(b"auth"),
+                    "signature": _encode(b"sig"),
+                    "userHandle": None,
+                },
+            }
         }
-        verify_response = self.client.post(
-            "/auth/webauthn/login/verify", json=verify_payload
-        )
+
+        with patch(
+            "app.api.webauthn.verify_authentication_response",
+            autospec=True,
+        ) as verify_mock:
+            verify_mock.return_value = type(
+                "Verified",
+                (),
+                {
+                    "new_sign_count": 2,
+                },
+            )()
+            verify_response = self.client.post(
+                "/auth/webauthn/login/verify", json=verify_payload
+            )
         self.assertEqual(verify_response.status_code, 200)
         body = verify_response.json()
         self.assertEqual(body["status"], "ok")
@@ -137,13 +158,27 @@ class LoginVerifyTest(unittest.TestCase):
         self.assertEqual(options_response.status_code, 200)
 
         verify_payload = {
-            "credential_id": _encode(b"cred-2"),
-            "challenge": "not-the-challenge",
-            "sign_count": 2,
+            "credential": {
+                "id": _encode(b"cred-2"),
+                "rawId": _encode(b"cred-2"),
+                "type": "public-key",
+                "response": {
+                    "clientDataJSON": _encode(b"client"),
+                    "authenticatorData": _encode(b"auth"),
+                    "signature": _encode(b"sig"),
+                    "userHandle": None,
+                },
+            }
         }
-        verify_response = self.client.post(
-            "/auth/webauthn/login/verify", json=verify_payload
-        )
+
+        with patch(
+            "app.api.webauthn.verify_authentication_response",
+            autospec=True,
+            side_effect=Exception("login challenge mismatch"),
+        ):
+            verify_response = self.client.post(
+                "/auth/webauthn/login/verify", json=verify_payload
+            )
         self.assertEqual(verify_response.status_code, 400)
         self.assertIsNone(verify_response.cookies.get(self.config.session.cookie_name))
 

@@ -28,18 +28,12 @@ type LoginOptionsResponse = {
 };
 
 type RegistrationVerifyPayload = {
-  credential_id: string;
-  public_key: string;
-  sign_count: number;
+  credential: Record<string, unknown>;
   transports?: string[];
-  challenge: string;
-  user_handle: string;
 };
 
 type LoginVerifyPayload = {
-  credential_id: string;
-  challenge: string;
-  sign_count: number;
+  credential: Record<string, unknown>;
 };
 
 type StatusResponse = { status: string; user_id?: string };
@@ -187,31 +181,31 @@ export async function registerPasskey(displayName: string): Promise<void> {
     getTransports?: () => string[];
   };
 
-  // NOTE: We intentionally do not attempt to read the attestation public key
-  // from the browser (e.g. via getPublicKey()). Firefox can throw cross-origin
-  // style permission errors when touching some credential response internals.
-  // The backend does not currently validate attestation signatures; login relies
-  // on credential_id + sign_count. Store a placeholder public key.
-  const publicKeyBytes: ArrayBuffer = new Uint8Array([0]).buffer;
-  console.log("passkey.register.step", "using_placeholder_public_key");
+  const responseJson = {
+    clientDataJSON: toBase64Url(response.clientDataJSON),
+    attestationObject: toBase64Url(response.attestationObject)
+  };
 
+  // Transports is optional and not supported consistently.
   let transports: string[] | undefined;
   try {
-    transports = response.getTransports ? response.getTransports() : undefined;
+    transports = (response as any).getTransports ? (response as any).getTransports() : undefined;
     console.log("passkey.register.step", "got_transports", { transports });
   } catch (err) {
     console.warn("passkey.register.step", "getTransports_failed", err);
     transports = undefined;
   }
 
+  const credentialJson = {
+    id: credential.id,
+    rawId: credential.id,
+    type: credential.type,
+    response: responseJson
+  };
+
   const payload: RegistrationVerifyPayload = {
-    // Prefer the string id to avoid browser differences around rawId access.
-    credential_id: credential.id,
-    public_key: toBase64Url(publicKeyBytes),
-    sign_count: 0,
-    transports,
-    challenge: options.challenge,
-    user_handle: options.user.id
+    credential: credentialJson,
+    transports
   };
 
   console.log("passkey.register.step", "posting_register_verify");
@@ -250,10 +244,22 @@ export async function signInWithPasskey(): Promise<void> {
 
   const response = credential.response as AuthenticatorAssertionResponse;
 
+  const responseJson = {
+    clientDataJSON: toBase64Url(response.clientDataJSON),
+    authenticatorData: toBase64Url(response.authenticatorData),
+    signature: toBase64Url(response.signature),
+    userHandle: response.userHandle ? toBase64Url(response.userHandle) : null,
+  };
+
+  const credentialJson = {
+    id: credential.id,
+    rawId: credential.id,
+    type: credential.type,
+    response: responseJson,
+  };
+
   const payload: LoginVerifyPayload = {
-    credential_id: credential.id,
-    challenge: options.challenge,
-    sign_count: parseSignCount(response.authenticatorData)
+    credential: credentialJson,
   };
 
   await requestJson<StatusResponse>("/auth/webauthn/login/verify", {

@@ -7,6 +7,7 @@ from typing import Any
 import uuid
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
+from webauthn import verify_authentication_response, verify_registration_response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -45,18 +46,14 @@ class RegistrationOptionsRequest(BaseModel):
 
 
 class RegistrationVerifyRequest(BaseModel):
-    credential_id: str = Field(min_length=1)
-    public_key: str = Field(min_length=1)
-    sign_count: int = Field(default=0, ge=0)
+    # Full RegistrationCredential payload from the browser (base64url strings).
+    credential: dict[str, Any]
     transports: list[str] | None = None
-    challenge: str = Field(min_length=1)
-    user_handle: str = Field(min_length=1)
 
 
 class LoginVerifyRequest(BaseModel):
-    credential_id: str = Field(min_length=1)
-    challenge: str = Field(min_length=1)
-    sign_count: int = Field(default=0, ge=0)
+    # Full AuthenticationCredential payload from the browser (base64url strings).
+    credential: dict[str, Any]
 
 
 @router.post("/register/options")
@@ -175,12 +172,18 @@ def login_verify(
     challenge = store.consume(session_id)
     if challenge is None:
         raise HTTPException(status_code=400, detail="login challenge missing or expired")
-    if payload.challenge != challenge.challenge:
-        raise HTTPException(status_code=400, detail="login challenge mismatch")
-
     try:
-        credential_id = _base64url_decode(payload.credential_id)
+        expected_challenge = _base64url_decode(challenge.challenge)
     except ValueError as exc:
+        raise HTTPException(status_code=500, detail="invalid stored challenge") from exc
+
+    # Identify the credential by id in the payload.
+    try:
+        credential_id_raw = payload.credential.get("id")
+        if not isinstance(credential_id_raw, str) or not credential_id_raw:
+            raise ValueError("credential.id missing")
+        credential_id = _base64url_decode(credential_id_raw)
+    except Exception as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     credential = db.execute(
@@ -190,10 +193,21 @@ def login_verify(
         raise HTTPException(status_code=404, detail="credential not registered")
     if credential.user_id != challenge.user_id:
         raise HTTPException(status_code=403, detail="credential user mismatch")
-    if payload.sign_count < credential.sign_count:
-        raise HTTPException(status_code=400, detail="sign count regressed")
 
-    credential.sign_count = payload.sign_count
+    try:
+        verified = verify_authentication_response(
+            credential=payload.credential,
+            expected_challenge=expected_challenge,
+            expected_rp_id=config.webauthn.rp_id,
+            expected_origin=list(config.webauthn.origins),
+            credential_public_key=credential.public_key,
+            credential_current_sign_count=credential.sign_count,
+            require_user_verification=False,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    credential.sign_count = verified.new_sign_count
     db.commit()
 
     session = session_store.create(credential.user_id)
@@ -229,14 +243,25 @@ def registration_verify(
     challenge = store.consume(session_id)
     if challenge is None:
         raise HTTPException(status_code=400, detail="registration challenge missing or expired")
-    if payload.challenge != challenge.challenge or payload.user_handle != challenge.user_handle:
-        raise HTTPException(status_code=400, detail="registration challenge mismatch")
 
     try:
-        credential_id = _base64url_decode(payload.credential_id)
-        public_key = _base64url_decode(payload.public_key)
+        expected_challenge = _base64url_decode(challenge.challenge)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="invalid stored challenge") from exc
+
+    # Verify attestation and derive the credential public key server-side.
+    try:
+        verified = verify_registration_response(
+            credential=payload.credential,
+            expected_challenge=expected_challenge,
+            expected_rp_id=config.webauthn.rp_id,
+            expected_origin=list(config.webauthn.origins),
+            require_user_verification=False,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    credential_id = verified.credential_id
 
     existing_credential = db.execute(
         select(PasskeyCredential).where(PasskeyCredential.credential_id == credential_id)
@@ -253,8 +278,8 @@ def registration_verify(
         PasskeyCredential(
             user_id=user.id,
             credential_id=credential_id,
-            public_key=public_key,
-            sign_count=payload.sign_count,
+            public_key=verified.credential_public_key,
+            sign_count=verified.sign_count,
             transports=payload.transports,
         )
     )
@@ -267,7 +292,7 @@ def registration_verify(
     return {
         "status": "ok",
         "user_id": user.id,
-        "credential_id": payload.credential_id,
+        "credential_id": _base64url_encode_bytes(credential_id),
     }
 
 

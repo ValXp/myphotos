@@ -2,6 +2,7 @@ import base64
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -56,16 +57,34 @@ class RegistrationVerifyTest(unittest.TestCase):
         options_payload = options_response.json()
 
         verify_payload = {
-            "credential_id": _encode(b"cred-1"),
-            "public_key": _encode(b"pubkey-1"),
-            "sign_count": 0,
+            "credential": {
+                "id": _encode(b"cred-1"),
+                "rawId": _encode(b"cred-1"),
+                "type": "public-key",
+                "response": {
+                    "clientDataJSON": _encode(b"client"),
+                    "attestationObject": _encode(b"attest"),
+                },
+            },
             "transports": ["internal"],
-            "challenge": options_payload["challenge"],
-            "user_handle": options_payload["user"]["id"],
         }
-        verify_response = self.client.post(
-            "/auth/webauthn/register/verify", json=verify_payload
-        )
+
+        with patch(
+            "app.api.webauthn.verify_registration_response",
+            autospec=True,
+        ) as verify_mock:
+            verify_mock.return_value = type(
+                "Verified",
+                (),
+                {
+                    "credential_id": b"cred-1",
+                    "credential_public_key": b"pubkey-1",
+                    "sign_count": 0,
+                },
+            )()
+            verify_response = self.client.post(
+                "/auth/webauthn/register/verify", json=verify_payload
+            )
         self.assertEqual(verify_response.status_code, 200)
         body = verify_response.json()
         self.assertEqual(body["status"], "ok")
@@ -86,16 +105,26 @@ class RegistrationVerifyTest(unittest.TestCase):
         options_payload = options_response.json()
 
         verify_payload = {
-            "credential_id": _encode(b"cred-2"),
-            "public_key": _encode(b"pubkey-2"),
-            "sign_count": 0,
+            "credential": {
+                "id": _encode(b"cred-2"),
+                "rawId": _encode(b"cred-2"),
+                "type": "public-key",
+                "response": {
+                    "clientDataJSON": _encode(b"client"),
+                    "attestationObject": _encode(b"attest"),
+                },
+            },
             "transports": None,
-            "challenge": "not-the-challenge",
-            "user_handle": options_payload["user"]["id"],
         }
-        verify_response = self.client.post(
-            "/auth/webauthn/register/verify", json=verify_payload
-        )
+
+        with patch(
+            "app.api.webauthn.verify_registration_response",
+            autospec=True,
+            side_effect=Exception("registration challenge mismatch"),
+        ):
+            verify_response = self.client.post(
+                "/auth/webauthn/register/verify", json=verify_payload
+            )
         self.assertEqual(verify_response.status_code, 400)
 
         with self.session_factory() as db:
@@ -109,16 +138,33 @@ class RegistrationVerifyTest(unittest.TestCase):
         self.assertEqual(options_response.status_code, 200)
         options_payload = options_response.json()
         first_payload = {
-            "credential_id": _encode(b"cred-first"),
-            "public_key": _encode(b"pubkey-first"),
-            "sign_count": 1,
+            "credential": {
+                "id": _encode(b"cred-first"),
+                "rawId": _encode(b"cred-first"),
+                "type": "public-key",
+                "response": {
+                    "clientDataJSON": _encode(b"client"),
+                    "attestationObject": _encode(b"attest"),
+                },
+            },
             "transports": ["internal"],
-            "challenge": options_payload["challenge"],
-            "user_handle": options_payload["user"]["id"],
         }
-        first_response = self.client.post(
-            "/auth/webauthn/register/verify", json=first_payload
-        )
+        with patch(
+            "app.api.webauthn.verify_registration_response",
+            autospec=True,
+        ) as verify_mock:
+            verify_mock.return_value = type(
+                "Verified",
+                (),
+                {
+                    "credential_id": b"cred-first",
+                    "credential_public_key": b"pubkey-first",
+                    "sign_count": 1,
+                },
+            )()
+            first_response = self.client.post(
+                "/auth/webauthn/register/verify", json=first_payload
+            )
         self.assertEqual(first_response.status_code, 200)
 
         second_options = self.client.post(
@@ -126,16 +172,33 @@ class RegistrationVerifyTest(unittest.TestCase):
         )
         self.assertEqual(second_options.status_code, 200)
         second_payload = {
-            "credential_id": _encode(b"cred-second"),
-            "public_key": _encode(b"pubkey-second"),
-            "sign_count": 0,
+            "credential": {
+                "id": _encode(b"cred-second"),
+                "rawId": _encode(b"cred-second"),
+                "type": "public-key",
+                "response": {
+                    "clientDataJSON": _encode(b"client"),
+                    "attestationObject": _encode(b"attest"),
+                },
+            },
             "transports": ["usb"],
-            "challenge": second_options.json()["challenge"],
-            "user_handle": second_options.json()["user"]["id"],
         }
-        blocked_response = self.client.post(
-            "/auth/webauthn/register/verify", json=second_payload
-        )
+        with patch(
+            "app.api.webauthn.verify_registration_response",
+            autospec=True,
+        ) as verify_mock:
+            verify_mock.return_value = type(
+                "Verified",
+                (),
+                {
+                    "credential_id": b"cred-second",
+                    "credential_public_key": b"pubkey-second",
+                    "sign_count": 0,
+                },
+            )()
+            blocked_response = self.client.post(
+                "/auth/webauthn/register/verify", json=second_payload
+            )
         self.assertEqual(blocked_response.status_code, 401)
 
         with self.session_factory() as db:
@@ -143,9 +206,22 @@ class RegistrationVerifyTest(unittest.TestCase):
             session = self.session_store.create(user.id)
 
         self.client.cookies.set(self.config.session.cookie_name, session.id)
-        success_response = self.client.post(
-            "/auth/webauthn/register/verify", json=second_payload
-        )
+        with patch(
+            "app.api.webauthn.verify_registration_response",
+            autospec=True,
+        ) as verify_mock:
+            verify_mock.return_value = type(
+                "Verified",
+                (),
+                {
+                    "credential_id": b"cred-second",
+                    "credential_public_key": b"pubkey-second",
+                    "sign_count": 0,
+                },
+            )()
+            success_response = self.client.post(
+                "/auth/webauthn/register/verify", json=second_payload
+            )
         self.assertEqual(success_response.status_code, 200)
 
         with self.session_factory() as db:
