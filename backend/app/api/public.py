@@ -59,6 +59,7 @@ def list_public_album_assets(
         db.query(AlbumItem, Asset)
         .join(Asset, AlbumItem.asset_id == Asset.id)
         .filter(AlbumItem.album_id == share.album_id)
+        .filter(Asset.gone.is_(False))
         .order_by(AlbumItem.order_index.asc(), AlbumItem.asset_id.asc())
         .all()
     )

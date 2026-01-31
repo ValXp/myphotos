@@ -37,6 +37,8 @@ def list_albums(
             AlbumItem.album_id,
             func.count(AlbumItem.asset_id).label("item_count"),
         )
+        .join(Asset, AlbumItem.asset_id == Asset.id)
+        .filter(Asset.gone.is_(False))
         .group_by(AlbumItem.album_id)
         .subquery()
     )
@@ -76,6 +78,7 @@ def list_album_assets(
         db.query(AlbumItem, Asset)
         .join(Asset, AlbumItem.asset_id == Asset.id)
         .filter(AlbumItem.album_id == album_id)
+        .filter(Asset.gone.is_(False))
         .order_by(AlbumItem.order_index.asc(), AlbumItem.asset_id.asc())
         .all()
     )
@@ -415,7 +418,9 @@ def _generate_share_token(db: Session) -> str:
 def _album_item_count(db: Session, album_id: str) -> int:
     count = (
         db.query(func.count(AlbumItem.asset_id))
+        .join(Asset, AlbumItem.asset_id == Asset.id)
         .filter(AlbumItem.album_id == album_id)
+        .filter(Asset.gone.is_(False))
         .scalar()
     )
     return int(count or 0)

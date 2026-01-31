@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 import mimetypes
 import os
 from pathlib import Path
@@ -45,10 +46,12 @@ class FullScanJob:
         *,
         follow_symlinks: bool = False,
         on_change: AssetChangeCallback | None = None,
+        mark_gone: bool = True,
     ) -> None:
         self._roots = tuple(Path(root) for root in roots)
         self._follow_symlinks = follow_symlinks
         self._on_change = on_change
+        self._mark_gone = mark_gone
 
     def run(self, session: Session) -> ScanStats:
         stats = ScanStats()
@@ -75,6 +78,10 @@ class FullScanJob:
                 if upsert.created:
                     session.flush()
                 self._on_change(upsert)
+
+        if self._mark_gone:
+            _mark_missing_assets_gone(session, self._roots)
+
         session.commit()
         return stats
 
@@ -85,8 +92,14 @@ def run_full_scan(
     *,
     follow_symlinks: bool = False,
     on_change: AssetChangeCallback | None = None,
+    mark_gone: bool = True,
 ) -> ScanStats:
-    return FullScanJob(roots, follow_symlinks=follow_symlinks, on_change=on_change).run(session)
+    return FullScanJob(
+        roots,
+        follow_symlinks=follow_symlinks,
+        on_change=on_change,
+        mark_gone=mark_gone,
+    ).run(session)
 
 
 def upsert_asset(session: Session, path: Path) -> AssetUpsert | None:
@@ -171,11 +184,51 @@ def _upsert_asset_from_stat(
             original_device=device,
             original_inode=inode,
             original_mtime_ns=mtime_ns,
+            gone=False,
+            gone_at=None,
         )
         session.add(asset)
         return AssetUpsert(asset=asset, created=True, updated=False)
+
+    # If the asset was previously marked gone but the file exists again, revive it.
+    if asset.gone:
+        asset.gone = False
+        asset.gone_at = None
+
     updated = _update_asset(asset, asset_type, size, mime, device, inode, mtime_ns)
     return AssetUpsert(asset=asset, created=False, updated=updated)
+
+
+def _mark_missing_assets_gone(session: Session, roots: Iterable[Path]) -> None:
+    """Mark assets as gone when their source file no longer exists.
+
+    We do not delete rows; assets can be revived if a file reappears at the same path.
+    """
+
+    now = datetime.now(timezone.utc)
+
+    for root in roots:
+        resolved = root.expanduser().resolve(strict=False)
+        if resolved.is_file():
+            candidates = session.execute(
+                select(Asset).where(Asset.original_path == normalize_path(resolved))
+            ).scalars().all()
+        else:
+            prefix = normalize_path(resolved)
+            if not prefix.endswith(os.sep):
+                prefix += os.sep
+            candidates = session.execute(
+                select(Asset).where(Asset.original_path.like(prefix + "%"))
+            ).scalars().all()
+
+        for asset in candidates:
+            # If the file exists, ensure it isn't marked gone.
+            if Path(asset.original_path).exists():
+                continue
+            if asset.gone:
+                continue
+            asset.gone = True
+            asset.gone_at = now
 
 
 def _update_asset(

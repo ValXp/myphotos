@@ -83,7 +83,10 @@ def index_overview(
     scan_job = latest_scan_job(db)
     scan = scan_status_payload(scan_job)
 
-    asset_count = db.execute(select(func.count()).select_from(Asset)).scalar_one()
+    asset_count = (
+        db.execute(select(func.count()).select_from(Asset).where(Asset.gone.is_(False)))
+        .scalar_one()
+    )
 
     # Job counts.
     rows = db.execute(

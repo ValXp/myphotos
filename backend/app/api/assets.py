@@ -49,8 +49,10 @@ def list_assets(
     _: OwnerSession = Depends(require_owner_session),
 ) -> dict[str, object]:
     sort_ts = func.coalesce(Asset.captured_at, Asset.created_at)
-    query = db.query(Asset, sort_ts.label("sort_ts")).order_by(
-        sort_ts.desc(), Asset.id.desc()
+    query = (
+        db.query(Asset, sort_ts.label("sort_ts"))
+        .filter(Asset.gone.is_(False))
+        .order_by(sort_ts.desc(), Asset.id.desc())
     )
     start_dt = _normalize_datetime(start)
     end_dt = _normalize_datetime(end)
@@ -157,6 +159,7 @@ def get_asset_detail(
         db.query(Asset)
         .options(selectinload(Asset.variants))
         .filter(Asset.id == asset_id)
+        .filter(Asset.gone.is_(False))
         .one_or_none()
     )
     if asset is None:
@@ -177,6 +180,7 @@ def get_asset_thumbnail(
         db.query(Asset)
         .options(selectinload(Asset.variants))
         .filter(Asset.id == asset_id)
+        .filter(Asset.gone.is_(False))
         .one_or_none()
     )
     if asset is None:
@@ -204,7 +208,12 @@ def get_asset_original(
     config: Config = Depends(get_config),
     _: OwnerSession = Depends(require_owner_session),
 ) -> Response:
-    asset = db.query(Asset).filter(Asset.id == asset_id).one_or_none()
+    asset = (
+        db.query(Asset)
+        .filter(Asset.id == asset_id)
+        .filter(Asset.gone.is_(False))
+        .one_or_none()
+    )
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
     path = _resolve_original_path(asset.original_path, config.paths.originals)
@@ -228,7 +237,12 @@ def get_asset_stream(
     _: OwnerSession = Depends(require_owner_session),
 ) -> Response:
     """Back-compat: stream file selection via query param (?file=...)."""
-    asset = db.query(Asset).filter(Asset.id == asset_id).one_or_none()
+    asset = (
+        db.query(Asset)
+        .filter(Asset.id == asset_id)
+        .filter(Asset.gone.is_(False))
+        .one_or_none()
+    )
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
     if asset.type not in {AssetType.video, AssetType.live_photo}:
@@ -259,7 +273,12 @@ def get_asset_stream_file(
     This allows master.m3u8 to reference variant playlists and segments with relative
     paths (e.g. 720p.m3u8, 720p_000.ts).
     """
-    asset = db.query(Asset).filter(Asset.id == asset_id).one_or_none()
+    asset = (
+        db.query(Asset)
+        .filter(Asset.id == asset_id)
+        .filter(Asset.gone.is_(False))
+        .one_or_none()
+    )
     if asset is None:
         raise HTTPException(status_code=404, detail="asset not found")
     if asset.type not in {AssetType.video, AssetType.live_photo}:
@@ -288,6 +307,7 @@ def get_asset_live_video(
         db.query(Asset)
         .options(selectinload(Asset.variants))
         .filter(Asset.id == asset_id)
+        .filter(Asset.gone.is_(False))
         .one_or_none()
     )
     if asset is None:

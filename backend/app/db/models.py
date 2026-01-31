@@ -6,6 +6,7 @@ from datetime import datetime
 from sqlalchemy import (
     JSON,
     BigInteger,
+    Boolean,
     DateTime,
     Enum as SQLEnum,
     Float,
@@ -98,6 +99,9 @@ class Asset(Base):
         String(36),
         ForeignKey("assets.id", ondelete="SET NULL"),
     )
+
+    gone: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    gone_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     variants: Mapped[list["AssetVariant"]] = relationship(
         back_populates="asset", cascade="all, delete-orphan"
