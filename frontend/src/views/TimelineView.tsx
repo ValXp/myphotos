@@ -429,7 +429,7 @@ export function TimelineView() {
   );
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>({});
   const [filterError, setFilterError] = useState<string | null>(null);
-  const [scanPath, setScanPath] = useState<string>("iphone_17_val_sample_videos");
+  const [scanPath, setScanPath] = useState<string>("");
   const [scanStatus, setScanStatus] = useState<ScanStatus | null>(null);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [overview, setOverview] = useState<OverviewPayload | null>(null);
@@ -609,17 +609,7 @@ export function TimelineView() {
     setIsScanning(true);
     setScanMessage(null);
     try {
-      const params = new URLSearchParams();
-      const trimmed = scanPath.trim();
-      if (trimmed) {
-        // The API accepts relative paths under ORIGINALS_DIR as well.
-        params.append("path", trimmed);
-      }
-      const query = params.toString();
-      const data = await requestJson<ScanStatus>(
-        `/admin/index/scan${query ? `?${query}` : ""}`,
-        { method: "POST" }
-      );
+      const data = await requestJson<ScanStatus>(`/admin/index/scan`, { method: "POST" });
       setScanStatus(data);
       setScanMessage("Scan started.");
       void fetchOverview();
@@ -817,15 +807,8 @@ export function TimelineView() {
           </div>
 
           <div className="scan-controls" role="group" aria-label="Index scan controls">
-            <input
-              className="text-input"
-              value={scanPath}
-              onChange={(event) => setScanPath(event.target.value)}
-              placeholder="Folder under originals (blank = all)"
-              aria-label="Scan folder"
-            />
             <button className="ghost" onClick={() => void runScan()} disabled={isScanning}>
-              {isScanning ? "Scanning..." : "Scan"}
+              {isScanning ? "Scanning..." : "Scan library"}
             </button>
           </div>
 
