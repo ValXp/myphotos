@@ -180,7 +180,6 @@ export async function registerPasskey(displayName: string): Promise<void> {
   console.log("passkey.register.step", "credential_ok", {
     type: credential.type,
     id: credential.id,
-    rawIdBytes: credential.rawId?.byteLength,
   });
 
   const response = credential.response as AuthenticatorAttestationResponse & {
@@ -217,7 +216,8 @@ export async function registerPasskey(displayName: string): Promise<void> {
   }
 
   const payload: RegistrationVerifyPayload = {
-    credential_id: toBase64Url(credential.rawId),
+    // Prefer the string id to avoid browser differences around rawId access.
+    credential_id: credential.id,
     public_key: toBase64Url(publicKeyBytes),
     sign_count: 0,
     transports,
@@ -262,7 +262,7 @@ export async function signInWithPasskey(): Promise<void> {
   const response = credential.response as AuthenticatorAssertionResponse;
 
   const payload: LoginVerifyPayload = {
-    credential_id: toBase64Url(credential.rawId),
+    credential_id: credential.id,
     challenge: options.challenge,
     sign_count: parseSignCount(response.authenticatorData)
   };
