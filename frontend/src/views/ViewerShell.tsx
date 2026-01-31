@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Hls from "hls.js";
 import { Link, useSearchParams } from "react-router-dom";
 
 const ZOOM_LEVELS = [1, 1.5, 2, 3];
@@ -126,6 +127,7 @@ export function ViewerShell({
   const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedAssetId = searchParams.get("asset");
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const paramIndex = useMemo(() => {
     if (!selectedAssetId) {
@@ -221,6 +223,72 @@ export function ViewerShell({
     ? (photoUrl ? photoUrl(selectedAsset.id) : previewUrl(selectedAsset.id))
     : "";
 
+  const videoSource = selectedAsset && isVideo ? streamUrl(selectedAsset.id) : "";
+
+  useEffect(() => {
+    if (!selectedAsset || !isVideo) {
+      return;
+    }
+    const element = videoRef.current;
+    if (!element) {
+      return;
+    }
+
+    // Reset between selections.
+    // jsdom doesn't implement pause/load, so guard for tests.
+    if (typeof element.pause === "function") {
+      try {
+        element.pause();
+      } catch {
+        // ignore
+      }
+    }
+    element.removeAttribute("src");
+    if (typeof element.load === "function") {
+      try {
+        element.load();
+      } catch {
+        // ignore
+      }
+    }
+
+    const source = videoSource;
+    if (!source) {
+      return;
+    }
+
+    // HLS: Firefox (and most non-Safari browsers) need hls.js.
+    if (source.includes(".m3u8")) {
+      const canNativeHls =
+        typeof element.canPlayType === "function" &&
+        element.canPlayType("application/vnd.apple.mpegurl") !== "";
+
+      if (canNativeHls) {
+        element.src = source;
+        return;
+      }
+
+      if (Hls.isSupported()) {
+        const hls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: false
+        });
+        hls.loadSource(source);
+        hls.attachMedia(element);
+        return () => {
+          hls.destroy();
+        };
+      }
+
+      // No HLS support.
+      element.src = source;
+      return;
+    }
+
+    // Progressive fallback.
+    element.src = source;
+  }, [isVideo, selectedAsset, videoSource]);
+
   const handleZoomIn = useCallback(() => {
     setZoomIndex((index) => Math.min(index + 1, ZOOM_LEVELS.length - 1));
   }, []);
@@ -256,13 +324,13 @@ export function ViewerShell({
             <>
               {isVideo ? (
                 <video
+                  ref={videoRef}
                   key={selectedAsset.id}
                   className="viewer-media-item"
                   controls
                   preload="metadata"
                   playsInline
                   poster={previewUrl(selectedAsset.id)}
-                  src={streamUrl(selectedAsset.id)}
                   aria-label={videoLabel}
                 />
               ) : (
