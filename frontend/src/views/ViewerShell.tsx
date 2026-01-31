@@ -474,32 +474,7 @@ export function ViewerShell({
                 </button>
               </div>
             </div>
-            {isVideo && sortedHlsLevels.length > 0 && (
-              <div className="viewer-zoom">
-                <span className="viewer-zoom-label">Quality</span>
-                <div className="viewer-zoom-buttons">
-                  <select
-                    className="text-input"
-                    value={hlsLevelIndex}
-                    onChange={handleHlsLevelChange}
-                    aria-label="Select video quality"
-                  >
-                    <option value={-1}>Auto</option>
-                    {sortedHlsLevels.map((level) => {
-                      const label = level.height
-                        ? `${level.height}p${level.bitrate ? ` (${Math.round(level.bitrate / 1000)} kbps)` : ""}`
-                        : `Level ${level.index}`;
-                      return (
-                        <option key={level.index} value={level.index}>
-                          {label}
-                        </option>
-                      );
-                    })}
-                  </select>
-                  {selectedHlsLabel && <span className="viewer-zoom-value">{selectedHlsLabel}</span>}
-                </div>
-              </div>
-            )}
+            {/* Quality selector rendered in the meta panel so it also shows when footer nav is hidden. */}
           </div>
         )}
         {nextCursor && hasItems && (
@@ -517,6 +492,33 @@ export function ViewerShell({
           {selectedIndex >= 0 && <span className="pill">{selectedIndex + 1} of {items.length}</span>}
           {selectedAsset?.live_photo_video_id && <span className="pill">Live pairing</span>}
         </div>
+
+        {isVideo && sortedHlsLevels.length > 0 && (
+          <div className="viewer-zoom" role="group" aria-label="Video quality">
+            <span className="viewer-zoom-label">Quality</span>
+            <div className="viewer-zoom-buttons">
+              <select
+                className="text-input"
+                value={hlsLevelIndex}
+                onChange={handleHlsLevelChange}
+                aria-label="Select video quality"
+              >
+                <option value={-1}>Auto</option>
+                {sortedHlsLevels.map((level) => {
+                  const label = level.height
+                    ? `${level.height}p${level.bitrate ? ` (${Math.round(level.bitrate / 1000)} kbps)` : ""}`
+                    : `Level ${level.index}`;
+                  return (
+                    <option key={level.index} value={level.index}>
+                      {label}
+                    </option>
+                  );
+                })}
+              </select>
+              {selectedHlsLabel && <span className="viewer-zoom-value">{selectedHlsLabel}</span>}
+            </div>
+          </div>
+        )}
         {backLink && (
           <Link className="ghost" to={backLink.to}>
             {backLink.label}
