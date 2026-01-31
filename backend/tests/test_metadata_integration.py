@@ -15,11 +15,8 @@ from app.db.models import Asset
 from app.media.metadata import run_metadata_job
 
 JPEG_BASE64 = (
-    "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////"
-    "/2wBDAf//////////////////////////////////////////////////////////////////////////////////////"
-    "wAARCAAQABADASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAf/xAAVAQEBAAAAAAAAAAAAAAAAAAAAAv"
-    "/aAAwDAQACEAMQAAABywAAAAAAAAAB/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPwB//8QAFBEB"
-    "AAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPwB//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPwB//9k="
+    "/9j/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/"
+    "wAALCAAQABABAREA/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oACAEBAAA/APyqooor/9k="
 )
 
 EXIFTOOL = shutil.which("exiftool")
@@ -53,7 +50,8 @@ class MetadataIntegrationTest(unittest.TestCase):
                         "-DateTimeOriginal=2020:01:02 03:04:05",
                         "-OffsetTimeOriginal=+00:00",
                         "-GPSLatitude=37.7749",
-                        "-GPSLongitude=-122.4194",
+                        "-GPSLongitude=122.4194",
+                        "-GPSLongitudeRef=West",
                         str(photo),
                     ],
                     check=True,

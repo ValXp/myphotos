@@ -146,9 +146,19 @@ def parse_exiftool_payload(payload: object) -> MetadataResult:
 
     lat = _parse_float(data.get("GPSLatitude"))
     lon = _parse_float(data.get("GPSLongitude"))
+    lat_ref = _parse_string(data.get("GPSLatitudeRef"))
+    lon_ref = _parse_string(data.get("GPSLongitudeRef"))
+
     if lat is None or lon is None:
         lat = None
         lon = None
+    else:
+        # ExifTool may report positive coordinates with a Ref (N/S/E/W).
+        # Normalise to signed floats.
+        if lat_ref and lat_ref.upper() == "S" and lat > 0:
+            lat = -lat
+        if lon_ref and lon_ref.upper() == "W" and lon > 0:
+            lon = -lon
 
     return MetadataResult(
         captured_at=captured_at,

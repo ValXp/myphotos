@@ -162,7 +162,10 @@ def _generate_thumbnails(
     if not source_path.exists():
         raise ThumbnailError(f"file not found: {source_path}")
     vips = _load_vips(vips_module)
-    image = vips.Image.new_from_file(str(source_path), access="sequential")
+    # We load with "sequential" for speed, but some downstream operations (notably
+    # JPEG save) can require backwards seeks. Copying forces evaluation into a new
+    # image pipeline that supports random access.
+    image = vips.Image.new_from_file(str(source_path), access="random")
 
     variants: list[AssetVariant] = []
     for profile in profiles:
