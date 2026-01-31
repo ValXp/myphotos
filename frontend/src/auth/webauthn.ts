@@ -187,24 +187,13 @@ export async function registerPasskey(displayName: string): Promise<void> {
     getTransports?: () => string[];
   };
 
-  let publicKeyBytes: ArrayBuffer | null | undefined;
-  try {
-    publicKeyBytes = response.getPublicKey?.();
-  } catch {
-    publicKeyBytes = null;
-  }
-
-  // Some browsers (or environments) do not expose getPublicKey().
-  // Our server does not currently validate attestation signatures, and the login
-  // flow only relies on credential_id + sign_count. Store a placeholder.
-  if (!publicKeyBytes) {
-    console.log("passkey.register.step", "no_getPublicKey_available_using_placeholder");
-    publicKeyBytes = new Uint8Array([0]).buffer;
-  } else {
-    console.log("passkey.register.step", "got_public_key_bytes", {
-      publicKeyBytes: publicKeyBytes.byteLength,
-    });
-  }
+  // NOTE: We intentionally do not attempt to read the attestation public key
+  // from the browser (e.g. via getPublicKey()). Firefox can throw cross-origin
+  // style permission errors when touching some credential response internals.
+  // The backend does not currently validate attestation signatures; login relies
+  // on credential_id + sign_count. Store a placeholder public key.
+  const publicKeyBytes: ArrayBuffer = new Uint8Array([0]).buffer;
+  console.log("passkey.register.step", "using_placeholder_public_key");
 
   let transports: string[] | undefined;
   try {
