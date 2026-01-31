@@ -3,6 +3,7 @@ fastapi>=0.110
 httpx>=0.27
 psycopg[binary]>=3.2
 pyvips>=2.2
+# libvips on this VM needs VIPSHOME=/usr so dynamic modules (heif/pdf/etc) load.
 redis>=5.0
 sqlalchemy>=2.0
 webauthn>=2.7.0
