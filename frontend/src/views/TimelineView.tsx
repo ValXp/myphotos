@@ -419,6 +419,7 @@ async function fetchAssets(cursor: string | null, filters: ActiveFilters): Promi
 export function TimelineView() {
   const { refreshSession } = useAuth();
   const [items, setItems] = useState<AssetSummary[]>([]);
+  const [staggerEnabled, setStaggerEnabled] = useState(true);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "loading-more" | "error">(
     "idle"
@@ -470,12 +471,27 @@ export function TimelineView() {
         if (mode === "poll") {
           setItems((prev) => {
             const nextById = new Map(data.items.map((asset) => [asset.id, asset]));
-            return prev.map((asset) => nextById.get(asset.id) ?? asset);
+            // Only update fields that affect processing indicators to reduce UI churn.
+            return prev.map((asset) => {
+              const next = nextById.get(asset.id);
+              if (!next) {
+                return asset;
+              }
+              return {
+                ...asset,
+                ready: next.ready,
+                processing: next.processing,
+                duration_ms: next.duration_ms,
+                width: next.width,
+                height: next.height
+              };
+            });
           });
-        } else {
-          setItems((prev) => (mode === "initial" ? data.items : [...prev, ...data.items]));
-          setNextCursor(data.next_cursor ?? null);
+          return;
         }
+
+        setItems((prev) => (mode === "initial" ? data.items : [...prev, ...data.items]));
+        setNextCursor(data.next_cursor ?? null);
         setStatus("ready");
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unable to load timeline.";
@@ -716,6 +732,12 @@ export function TimelineView() {
     void loadAssets(null, "initial", activeFilters);
   }, [activeFilters, loadAssets]);
 
+  useEffect(() => {
+    if (status === "ready" && items.length > 0 && staggerEnabled) {
+      setStaggerEnabled(false);
+    }
+  }, [items.length, staggerEnabled, status]);
+
   // Live-update processing/ready status while background jobs are active.
   useEffect(() => {
     if (!overview || overview.active_jobs <= 0) {
@@ -723,10 +745,10 @@ export function TimelineView() {
     }
     const interval = window.setInterval(() => {
       void loadAssets(null, "poll", activeFilters);
-      void fetchOverview();
-    }, 2000);
+      // overview already polls elsewhere
+    }, 3000);
     return () => window.clearInterval(interval);
-  }, [activeFilters, fetchOverview, loadAssets, overview]);
+  }, [activeFilters, loadAssets, overview]);
 
   useEffect(() => {
     void loadAlbums();
@@ -1030,7 +1052,7 @@ export function TimelineView() {
         </div>
       )}
       {hasItems && (
-        <div className="grid timeline-grid stagger">
+        <div className={`grid timeline-grid${staggerEnabled ? " stagger" : ""}`}>
           {items.map((asset, index) => {
             const dateLabel = formatDateLabel(asset);
             const timeLabel = formatTimeLabel(asset);
