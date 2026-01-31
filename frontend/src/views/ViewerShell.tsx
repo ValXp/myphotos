@@ -151,7 +151,14 @@ export function ViewerShell({
     if (selectedAssetId && paramIndex >= 0) {
       return;
     }
-    setSearchParams({ asset: items[0].id }, { replace: true });
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("asset", items[0].id);
+        return next;
+      },
+      { replace: true }
+    );
   }, [items, paramIndex, selectedAssetId, setSearchParams]);
 
   useEffect(() => {
@@ -163,7 +170,11 @@ export function ViewerShell({
       if (nextIndex < 0 || nextIndex >= items.length) {
         return;
       }
-      setSearchParams({ asset: items[nextIndex].id });
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("asset", items[nextIndex].id);
+        return next;
+      });
     },
     [items, setSearchParams]
   );

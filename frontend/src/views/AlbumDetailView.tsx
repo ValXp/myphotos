@@ -1,11 +1,13 @@
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useLivePhotoHover } from "../hooks/useLivePhotoHover";
+import { ViewerShell } from "./ViewerShell";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 const THUMB_PROFILE = "thumb_md";
+const VIEWER_PROFILE = "thumb_lg";
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -190,6 +192,14 @@ function thumbnailUrl(assetId: string): string {
   return buildApiUrl(`/assets/${assetId}/thumb?profile=${THUMB_PROFILE}`);
 }
 
+function viewerPhotoUrl(assetId: string): string {
+  return buildApiUrl(`/assets/${assetId}/thumb?profile=${VIEWER_PROFILE}`);
+}
+
+function streamUrl(assetId: string): string {
+  return buildApiUrl(`/assets/${assetId}/stream`);
+}
+
 function liveVideoUrl(assetId: string): string {
   return buildApiUrl(`/assets/${assetId}/live`);
 }
@@ -219,6 +229,9 @@ export function AlbumDetailView() {
   const [revokingShareIds, setRevokingShareIds] = useState<Set<string>>(() => new Set());
   const [copiedShareId, setCopiedShareId] = useState<string | null>(null);
   const { registerVideoRef, handleMouseEnter, handleMouseLeave } = useLivePhotoHover();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const viewerOpen = searchParams.get("viewer") === "1";
 
   const loadAlbum = useCallback(async () => {
     if (!albumId) {
@@ -424,6 +437,40 @@ export function AlbumDetailView() {
     }
   }, [albumId, refreshSession, selectedIds]);
 
+  const openViewer = useCallback(
+    (assetId: string) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("asset", assetId);
+        next.set("viewer", "1");
+        return next;
+      });
+    },
+    [setSearchParams]
+  );
+
+  const closeViewer = useCallback(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("viewer");
+      next.delete("asset");
+      return next;
+    });
+  }, [setSearchParams]);
+
+  useEffect(() => {
+    if (!viewerOpen) {
+      return;
+    }
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeViewer();
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [closeViewer, viewerOpen]);
+
   useEffect(() => {
     void loadAlbum();
   }, [loadAlbum]);
@@ -489,6 +536,28 @@ export function AlbumDetailView() {
           </div>
         </div>
       </header>
+
+      {viewerOpen && (
+        <div className="viewer-overlay" onClick={closeViewer} role="dialog" aria-modal="true">
+          <div className="viewer-overlay-panel" onClick={(event) => event.stopPropagation()}>
+            <button className="viewer-overlay-close ghost" onClick={closeViewer}>
+              Close
+            </button>
+            <ViewerShell
+              contextLabel="Owner album"
+              emptyMessage="No assets loaded."
+              emptySubhead="Pick an asset from the album."
+              items={items}
+              status={status === "loading" ? "loading" : status === "ready" ? "ready" : status === "error" ? "error" : "idle"}
+              error={error}
+              previewUrl={thumbnailUrl}
+              photoUrl={viewerPhotoUrl}
+              streamUrl={streamUrl}
+            />
+          </div>
+        </div>
+      )}
+
       <div className="share-section">
         <div className="share-panel">
           <p className="eyebrow">Share this album</p>
@@ -636,10 +705,20 @@ export function AlbumDetailView() {
               >
                 <div
                   className={`media-thumb${isLivePhoto ? " live-photo-thumb" : ""}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openViewer(asset.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      openViewer(asset.id);
+                    }
+                  }}
                   onMouseEnter={isLivePhoto ? () => handleMouseEnter(asset.id) : undefined}
                   onMouseLeave={isLivePhoto ? () => handleMouseLeave(asset.id) : undefined}
+                  aria-label={`Open ${typeLabel.toLowerCase()} viewer`}
                 >
-                  <label className="media-select">
+                  <label className="media-select" onClick={(event) => event.stopPropagation()}>
                     <input
                       type="checkbox"
                       checked={isSelected}
