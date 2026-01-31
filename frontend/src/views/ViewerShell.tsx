@@ -271,10 +271,27 @@ export function ViewerShell({
       preload: "metadata",
       playsinline: true,
       fluid: true,
+      autoplay: true,
       sources: [{ src: source, type }]
     });
 
     playerRef.current = player;
+
+    // Try to start playback immediately when the viewer opens.
+    // (Browsers may block autoplay unless muted; if blocked, this is a no-op.)
+    try {
+      player.ready(() => {
+        const el = element as HTMLVideoElement;
+        const maybePromise = el.play?.();
+        if (maybePromise && typeof (maybePromise as Promise<unknown>).catch === "function") {
+          (maybePromise as Promise<unknown>).catch(() => {
+            // ignore autoplay rejection
+          });
+        }
+      });
+    } catch {
+      // ignore
+    }
 
     // Add an in-player quality selector next to fullscreen.
     // We rely on videojs-contrib-quality-levels (VHS populates levels for HLS).
@@ -326,12 +343,36 @@ export function ViewerShell({
             for (let i = 0; i < qualityLevels.length; i += 1) {
               qualityLevels[i].enabled = true;
             }
-            return;
+          } else {
+            const targetH = Number(value);
+            for (let i = 0; i < qualityLevels.length; i += 1) {
+              const lvl = qualityLevels[i];
+              lvl.enabled = lvl?.height === targetH;
+            }
           }
-          const targetH = Number(value);
-          for (let i = 0; i < qualityLevels.length; i += 1) {
-            const lvl = qualityLevels[i];
-            lvl.enabled = lvl?.height === targetH;
+
+          // Force VHS to start fetching segments for the newly enabled rendition.
+          // Without this, previously-buffered segments can continue playing for a while.
+          try {
+            const t = player.currentTime();
+            // @ts-expect-error internal VHS bits
+            const vhs = (player.tech(true) as any)?.vhs;
+            const loader =
+              vhs?.playlistController_?.mainSegmentLoader_ ??
+              vhs?.playlistController_?.audioSegmentLoader_;
+            loader?.resetEverything?.();
+            // Keep playback position.
+            player.currentTime(t);
+            player.play();
+          } catch {
+            // Best-effort: seek-to-self to encourage a re-request.
+            try {
+              const t = player.currentTime();
+              player.currentTime(t);
+              player.play();
+            } catch {
+              // ignore
+            }
           }
         };
 
