@@ -334,6 +334,7 @@ export function ViewerShell({
                   playsInline
                   poster={previewUrl(selectedAsset.id)}
                   aria-label={videoLabel}
+                  data-stream-src={videoSource}
                 />
               ) : (
                 <img

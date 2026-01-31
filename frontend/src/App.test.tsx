@@ -297,8 +297,10 @@ describe("App flows", () => {
     );
 
     const video = await screen.findByLabelText(/video playback from jan 23, 2026/i);
+    // In browsers the video src is attached by hls.js; in tests we expose the intended
+    // stream URL via a data attribute.
     expect(video).toHaveAttribute(
-      "src",
+      "data-stream-src",
       expect.stringContaining("/assets/asset-owner-video/stream")
     );
     expect(video).toHaveAttribute(

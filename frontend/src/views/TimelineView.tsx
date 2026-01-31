@@ -443,6 +443,7 @@ export function TimelineView() {
   const [scanStatus, setScanStatus] = useState<ScanStatus | null>(null);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [overview, setOverview] = useState<OverviewPayload | null>(null);
+  const [liveUpdates, setLiveUpdates] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const inFlightRef = useRef(false);
@@ -777,14 +778,20 @@ export function TimelineView() {
 
   // Live-update processing/ready status while background jobs are active.
   useEffect(() => {
+    if (!liveUpdates) {
+      return;
+    }
     if (!overview || overview.active_jobs <= 0) {
       return;
     }
     const interval = window.setInterval(() => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
       void loadAssets(null, "poll", activeFilters);
     }, 5000);
     return () => window.clearInterval(interval);
-  }, [activeFilters, loadAssets, overview]);
+  }, [activeFilters, liveUpdates, loadAssets, overview]);
 
   useEffect(() => {
     void loadAlbums();
@@ -895,6 +902,14 @@ export function TimelineView() {
           <div className="scan-controls" role="group" aria-label="Index scan controls">
             <button className="ghost" onClick={() => void runScan()} disabled={isScanning}>
               {isScanning ? "Scanning..." : "Scan library"}
+            </button>
+            <button
+              className="ghost"
+              onClick={() => setLiveUpdates((value) => !value)}
+              aria-pressed={liveUpdates}
+              title="Poll the server for processing status"
+            >
+              Live updates: {liveUpdates ? "On" : "Off"}
             </button>
           </div>
 
@@ -1031,7 +1046,7 @@ export function TimelineView() {
       )}
 
       {(scanMessage || overview) && (
-        <div className="status" role="status">
+        <div className="status status-bar" role="status">
           {scanMessage && (
             <span>
               {scanMessage}

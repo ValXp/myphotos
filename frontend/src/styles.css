@@ -956,6 +956,10 @@ button.danger:hover {
   font-size: 0.9rem;
 }
 
+.status-bar {
+  min-height: 52px;
+}
+
 .status.error {
   background: rgba(215, 102, 53, 0.18);
   color: #a94821;
