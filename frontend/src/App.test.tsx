@@ -202,6 +202,8 @@ describe("App flows", () => {
       await screen.findByLabelText(/video playback from jan 20, 2026/i)
     ).toBeInTheDocument();
     expect(container.querySelector("video")).toBeInTheDocument();
+    expect(container.querySelector(".viewer-media-video")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /back to album/i })).toBeInTheDocument();
     // video.js attaches sources dynamically; in tests we expose the intended URL.
     expect(
       container.querySelector("video")?.getAttribute("data-stream-src")
