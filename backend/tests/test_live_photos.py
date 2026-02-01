@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -50,6 +51,45 @@ class LivePhotoLinkingTest(unittest.TestCase):
                     original_path=str(video_path),
                     original_bytes=video_path.stat().st_size,
                     original_mime="video/quicktime",
+                )
+                session.add_all([still, video])
+                session.flush()
+
+                links = link_live_photo_pairs(session)
+
+                self.assertEqual(len(links), 1)
+                self.assertEqual(still.type, AssetType.live_photo)
+                self.assertEqual(still.live_photo_video_id, video.id)
+        finally:
+            session.close()
+            engine.dispose()
+
+    def test_link_live_photo_pairs_uses_duration_and_capture_time(self) -> None:
+        session, engine = _create_session()
+        try:
+            with TemporaryDirectory() as tmpdir:
+                root = Path(tmpdir)
+                still_path = root / "IMG_3001.jpg"
+                video_path = root / "VID_9001.mov"
+                still_path.write_bytes(b"still")
+                video_path.write_bytes(b"video")
+
+                captured_at = datetime(2026, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+
+                still = Asset(
+                    type=AssetType.photo,
+                    original_path=str(still_path),
+                    original_bytes=still_path.stat().st_size,
+                    original_mime="image/jpeg",
+                    captured_at=captured_at,
+                )
+                video = Asset(
+                    type=AssetType.video,
+                    original_path=str(video_path),
+                    original_bytes=video_path.stat().st_size,
+                    original_mime="video/quicktime",
+                    captured_at=captured_at + timedelta(milliseconds=500),
+                    duration_ms=2000,
                 )
                 session.add_all([still, video])
                 session.flush()

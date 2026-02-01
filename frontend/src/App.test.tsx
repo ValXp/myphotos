@@ -294,10 +294,11 @@ describe("App flows", () => {
       expect.stringContaining("/assets/asset-owner-photo/thumb?profile=thumb_lg")
     );
     expect(container.querySelector("video")).not.toBeInTheDocument();
+    expect(container.querySelector(".viewer-duration")).not.toBeInTheDocument();
 
     cleanup();
 
-    render(
+    const { container: videoContainer } = render(
       <MemoryRouter initialEntries={["/app/timeline?viewer=1&asset=asset-owner-video"]}>
         <App />
       </MemoryRouter>
@@ -314,6 +315,7 @@ describe("App flows", () => {
       "poster",
       expect.stringContaining("/assets/asset-owner-video/thumb")
     );
+    expect(videoContainer.querySelector(".viewer-duration")).toHaveTextContent("1:04");
   });
 
   it("toggles live photo playback in the viewer", async () => {
@@ -693,7 +695,7 @@ describe("App flows", () => {
           type: "photo",
           captured_at: "2026-01-20T16:30:00Z",
           created_at: "2026-01-20T16:30:00Z",
-          duration_ms: null,
+          duration_ms: 45000,
           width: 4032,
           height: 3024,
           live_photo_video_id: null,
@@ -775,6 +777,9 @@ describe("App flows", () => {
       screen.getByRole("img", { name: "Photo thumbnail from Jan 20, 2026" })
     ).toHaveAttribute("src", expect.stringContaining("/assets/asset-1/thumb"));
     expect(container.querySelector("video.live-photo-video")).toBeInTheDocument();
+    const durationBadges = container.querySelectorAll(".media-duration");
+    expect(durationBadges).toHaveLength(1);
+    expect(durationBadges[0]).toHaveTextContent("2:08");
   });
 
   it("applies date and location filters to timeline requests", async () => {

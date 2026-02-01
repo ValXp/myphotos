@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from typing import Iterable
 
 IMAGE_EXTENSIONS = frozenset(
@@ -104,4 +105,8 @@ def _pair_matches(still: Path, video: Path) -> bool:
 
 
 def _stem_key(path: Path) -> str:
-    return path.stem.casefold()
+    stem = path.stem.casefold()
+    match = re.match(r"^img_e(\d+)$", stem)
+    if match:
+        return f"img_{match.group(1)}"
+    return stem

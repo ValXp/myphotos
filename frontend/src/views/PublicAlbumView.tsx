@@ -196,7 +196,10 @@ function formatDimensions(asset: AssetSummary): string | null {
   return `${asset.width} x ${asset.height}`;
 }
 
-function formatDuration(durationMs: number | null): string | null {
+function formatDuration(durationMs: number | null, type: AssetType): string | null {
+  if (type !== "video") {
+    return null;
+  }
   if (!durationMs || durationMs <= 0) {
     return null;
   }
@@ -514,7 +517,7 @@ export function PublicAlbumView() {
             const dateLabel = formatDateLabel(asset);
             const timeLabel = formatTimeLabel(asset);
             const dimensionLabel = formatDimensions(asset);
-            const durationLabel = formatDuration(asset.duration_ms);
+            const durationLabel = formatDuration(asset.duration_ms, asset.type);
             const metaParts = [timeLabel, dimensionLabel, durationLabel].filter(
               (value): value is string => !!value
             );

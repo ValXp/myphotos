@@ -3,14 +3,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import json
+import os
 import re
 import shutil
 import subprocess
 from pathlib import Path
 from typing import Any, TypeVar
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.db.enums import AssetType
 from app.db.models import Asset
 
 
@@ -39,11 +42,14 @@ class MetadataResult:
     lat: float | None = None
     lon: float | None = None
 
-    def apply_to_asset(self, asset: Asset) -> None:
+    def apply_to_asset(self, asset: Asset, *, allow_duration: bool = True) -> None:
         if self.captured_at is not None:
             asset.captured_at = self.captured_at
-        if self.duration_ms is not None:
-            asset.duration_ms = self.duration_ms
+        if allow_duration:
+            if self.duration_ms is not None:
+                asset.duration_ms = self.duration_ms
+        elif asset.duration_ms is not None:
+            asset.duration_ms = None
         if self.width is not None:
             asset.width = self.width
         if self.height is not None:
@@ -88,9 +94,13 @@ def run_metadata_job(
     asset = session.get(Asset, asset_id)
     if asset is None:
         raise MetadataNotFoundError(f"asset not found: {asset_id}")
-    metadata = extract_metadata(Path(asset.original_path), exiftool_path=exiftool_path, ffprobe_path=ffprobe_path)
-    metadata.apply_to_asset(asset)
+    metadata = extract_metadata(
+        Path(asset.original_path), exiftool_path=exiftool_path, ffprobe_path=ffprobe_path
+    )
+    allow_duration = asset.type == AssetType.video
+    metadata.apply_to_asset(asset, allow_duration=allow_duration)
     session.add(asset)
+    _link_live_photo_pairs_for_asset(session, asset)
     return metadata
 
 
@@ -202,12 +212,21 @@ def parse_ffprobe_payload(payload: object) -> MetadataResult:
     if isinstance(format_section, dict):
         duration = _parse_float(format_section.get("duration"))
         creation_time = _parse_string(_get_nested(format_section, "tags", "creation_time"))
+        if duration is None:
+            duration = _duration_from_tags(format_section.get("tags"))
 
     if duration is None and isinstance(streams, list):
         for stream in streams:
             if not isinstance(stream, dict):
                 continue
             duration = _parse_float(stream.get("duration"))
+            if duration is None:
+                duration = _duration_from_time_base(
+                    stream.get("duration_ts"),
+                    stream.get("time_base"),
+                )
+            if duration is None:
+                duration = _duration_from_tags(stream.get("tags"))
             if duration is not None:
                 break
 
@@ -288,6 +307,27 @@ def _run_command(args: list[str]) -> str:
     return completed.stdout
 
 
+def _link_live_photo_pairs_for_asset(session: Session, asset: Asset) -> None:
+    if not asset.original_path:
+        return
+    from app.ingest.live_photos import link_live_photo_pairs
+
+    assets = _assets_in_same_directory(session, asset)
+    if not assets:
+        return
+    link_live_photo_pairs(session, assets=assets)
+
+
+def _assets_in_same_directory(session: Session, asset: Asset) -> list[Asset]:
+    directory = Path(asset.original_path).parent
+    prefix = str(directory)
+    if not prefix.endswith(os.sep):
+        prefix += os.sep
+    return session.execute(
+        select(Asset).where(Asset.original_path.like(prefix + "%"))
+    ).scalars().all()
+
+
 def _first_int(data: dict[str, Any], keys: tuple[str, ...]) -> int | None:
     for key in keys:
         value = _parse_int(data.get(key))
@@ -329,6 +369,59 @@ def _parse_float(value: object) -> float | None:
             return float(value.strip())
         except ValueError:
             return None
+    return None
+
+
+def _parse_duration_tag(value: object) -> float | None:
+    text = _parse_string(value)
+    if text is None:
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        pass
+    parts = text.split(":")
+    if len(parts) != 3:
+        return None
+    try:
+        hours = int(parts[0])
+        minutes = int(parts[1])
+        seconds = float(parts[2])
+    except ValueError:
+        return None
+    return hours * 3600 + minutes * 60 + seconds
+
+
+def _duration_from_time_base(duration_ts: object, time_base: object) -> float | None:
+    ticks = _parse_int(duration_ts)
+    if ticks is None:
+        return None
+    if not isinstance(time_base, str):
+        return None
+    if "/" not in time_base:
+        return None
+    num_str, denom_str = time_base.split("/", 1)
+    try:
+        num = float(num_str)
+        denom = float(denom_str)
+    except ValueError:
+        return None
+    if denom == 0:
+        return None
+    return ticks * (num / denom)
+
+
+def _duration_from_tags(tags: object) -> float | None:
+    if not isinstance(tags, dict):
+        return None
+    for key, value in tags.items():
+        if not isinstance(key, str):
+            continue
+        if not key.casefold().startswith("duration"):
+            continue
+        parsed = _parse_duration_tag(value)
+        if parsed is not None:
+            return parsed
     return None
 
 

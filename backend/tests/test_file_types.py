@@ -35,12 +35,14 @@ class FileTypeRegistryTest(unittest.TestCase):
     def test_is_live_photo_pair(self) -> None:
         still = Path("/photos/IMG_0001.HEIC")
         video = Path("/photos/IMG_0001.MOV")
+        edited_still = Path("/photos/IMG_E0001.JPG")
         other_video = Path("/photos/IMG_0002.MOV")
         other_dir_video = Path("/other/IMG_0001.MOV")
         image_b = Path("/photos/IMG_0001.JPG")
 
         self.assertTrue(is_live_photo_pair(still, video))
         self.assertTrue(is_live_photo_pair(video, still))
+        self.assertTrue(is_live_photo_pair(edited_still, video))
         self.assertFalse(is_live_photo_pair(other_video, still))
         self.assertFalse(is_live_photo_pair(other_dir_video, still))
         self.assertFalse(is_live_photo_pair(image_b, still))
@@ -50,15 +52,20 @@ class FileTypeRegistryTest(unittest.TestCase):
         video = Path("/photos/IMG_0001.MOV")
         still_two = Path("/photos/IMG_0002.JPG")
         video_two = Path("/photos/IMG_0002.MP4")
+        still_three = Path("/photos/IMG_E0003.JPG")
+        video_three = Path("/photos/IMG_0003.MOV")
         unrelated = Path("/photos/README.txt")
 
-        pairs = find_live_photo_pairs([still, video, unrelated, still_two, video_two])
+        pairs = find_live_photo_pairs(
+            [still, video, unrelated, still_two, video_two, still_three, video_three]
+        )
 
         self.assertEqual(
             pairs,
             [
                 LivePhotoPair(still=still, video=video),
                 LivePhotoPair(still=still_two, video=video_two),
+                LivePhotoPair(still=still_three, video=video_three),
             ],
         )
 
