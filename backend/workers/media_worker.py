@@ -134,6 +134,29 @@ class MediaWorker:
             asset_id = _asset_id_from_payload(payload)
             if asset_id is None:
                 raise ValueError("asset_id is required for media jobs")
+
+            # Concurrency guard: don't run multiple transcodes for the same asset.
+            if job_type == JobType.transcode:
+                existing = (
+                    session.query(JobRecord)
+                    .filter(JobRecord.type == JobType.transcode)
+                    .filter(JobRecord.status == JobStatus.running)
+                    .filter(JobRecord.payload["asset_id"].as_string() == asset_id)
+                    .filter(JobRecord.id != db_job.id)
+                    .first()
+                )
+                if existing is not None:
+                    payload = dict(payload)
+                    payload["error"] = {
+                        "type": "duplicate",
+                        "message": f"Another transcode job is already running for asset {asset_id}: {existing.id}",
+                    }
+                    payload["finished_at"] = self._now().isoformat()
+                    db_job.status = JobStatus.failed
+                    db_job.payload = payload
+                    session.add(db_job)
+                    session.commit()
+                    return
             started_at = self._now()
             payload["asset_id"] = asset_id
             payload["started_at"] = started_at.isoformat()

@@ -123,11 +123,14 @@ def run_transcode_job(
         raise TranscodeError(f"file not found: {source_path}")
 
     renditions = None
-    if config is not None and hasattr(config, "media") and hasattr(config.media, "video_renditions"):
-        try:
-            renditions = list(config.media.video_renditions)
-        except TypeError:
-            renditions = None
+    use_qsv_for_4k = False
+    if config is not None and hasattr(config, "media"):
+        if hasattr(config.media, "video_renditions"):
+            try:
+                renditions = list(config.media.video_renditions)
+            except TypeError:
+                renditions = None
+        use_qsv_for_4k = bool(getattr(config.media, "use_qsv_for_4k", False))
 
     source_color = _probe_source_color(source_path, ffprobe_path=ffprobe_path)
 
@@ -146,6 +149,7 @@ def run_transcode_job(
             segment_pattern,
             profile,
             source_color=source_color,
+            use_qsv_for_4k=use_qsv_for_4k,
             ffmpeg_path=ffmpeg_path,
         )
     )
@@ -210,6 +214,7 @@ def _transcode_profile(
     profile: VariantProfile,
     *,
     source_color: SourceColorInfo,
+    use_qsv_for_4k: bool,
     ffmpeg_path: str,
     hls_time_seconds: int = DEFAULT_HLS_TIME_SECONDS,
 ) -> None:
@@ -259,38 +264,73 @@ def _transcode_profile(
             "bt709",
         ]
     elif profile.hdr:
-        # HDR 4K rendition: encode 10-bit HEVC.
+        # HDR 4K rendition.
         scale_filter = (
             f"scale=w={profile.width}:h={profile.height}:force_original_aspect_ratio=decrease"
         )
-        vf = f"{scale_filter},format=yuv420p10le"
         # Preserve transfer characteristic hint if we detected it.
         transfer = source_color.transfer or "smpte2084"
-        vcodec_args = [
-            "-c:v",
-            "libx265",
-            "-pix_fmt",
-            "yuv420p10le",
-            "-color_primaries",
-            "bt2020",
-            "-colorspace",
-            "bt2020nc",
-            "-color_trc",
-            transfer,
-        ]
+
+        if use_qsv_for_4k:
+            # QSV path (much faster): upload to QSV and encode 10-bit HEVC.
+            vf = f"{scale_filter},format=p010le,hwupload=extra_hw_frames=64"
+            vcodec_args = [
+                "-c:v",
+                "hevc_qsv",
+                "-pix_fmt",
+                "p010le",
+                "-color_primaries",
+                "bt2020",
+                "-colorspace",
+                "bt2020nc",
+                "-color_trc",
+                transfer,
+            ]
+        else:
+            # Software x265 path.
+            vf = f"{scale_filter},format=yuv420p10le"
+            vcodec_args = [
+                "-c:v",
+                "libx265",
+                "-pix_fmt",
+                "yuv420p10le",
+                "-color_primaries",
+                "bt2020",
+                "-colorspace",
+                "bt2020nc",
+                "-color_trc",
+                transfer,
+            ]
     else:
         scale_filter = (
             f"scale=w={profile.width}:h={profile.height}:force_original_aspect_ratio=decrease"
         )
-        vf = scale_filter
-        vcodec_args = [
-            "-c:v",
-            "libx264",
-            "-profile:v",
-            "main",
-            "-pix_fmt",
-            "yuv420p",
-        ]
+
+        if use_qsv_for_4k and profile.width == 3840 and profile.height == 2160:
+            # SDR 4K via QSV H.264.
+            vf = f"{scale_filter},format=nv12,hwupload=extra_hw_frames=64"
+            vcodec_args = [
+                "-c:v",
+                "h264_qsv",
+                "-pix_fmt",
+                "nv12",
+                "-color_primaries",
+                "bt709",
+                "-color_trc",
+                "bt709",
+                "-colorspace",
+                "bt709",
+            ]
+        else:
+            vf = scale_filter
+            vcodec_args = [
+                "-c:v",
+                "libx264",
+                "-profile:v",
+                "main",
+                "-pix_fmt",
+                "yuv420p",
+            ]
 
     args: list[str] = [
         ffmpeg_path,

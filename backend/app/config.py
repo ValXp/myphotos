@@ -69,14 +69,22 @@ class MediaConfig:
     - height: int
     - video_bitrate_kbps: int
     - audio_bitrate_kbps: int
+    - hdr (optional): bool
     - min_source_width (optional): int
     - min_source_height (optional): int
 
     If min_source_* is provided, the rendition is only generated when the source
     dimensions meet or exceed the minimum.
+
+    use_qsv_for_4k enables Intel Quick Sync for 4K renditions (2160p + 2160p_hdr)
+    to dramatically speed up transcodes.
+
+    transcode_workers is a suggestion for how many transcode-capable workers to run.
     """
 
     video_renditions: list[dict[str, Any]]
+    use_qsv_for_4k: bool = False
+    transcode_workers: int = 1
 
 
 @dataclass(frozen=True)
@@ -87,7 +95,7 @@ class Config:
     webauthn: WebAuthnConfig
     app: AppConfig
     session: SessionConfig
-    media: MediaConfig = MediaConfig(video_renditions=[])
+    media: MediaConfig = MediaConfig(video_renditions=[], use_qsv_for_4k=False, transcode_workers=1)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -122,6 +130,8 @@ class Config:
             },
             "media": {
                 "video_renditions": self.media.video_renditions,
+                "use_qsv_for_4k": self.media.use_qsv_for_4k,
+                "transcode_workers": self.media.transcode_workers,
             },
         }
 
@@ -215,6 +225,8 @@ def load_config(environ: Mapping[str, str] | None = None) -> Config:
 
     media = MediaConfig(
         video_renditions=_json_from_env(env, "VIDEO_RENDITIONS", default_video_renditions),
+        use_qsv_for_4k=bool(env.get("USE_QSV_FOR_4K", "1").strip() not in {"0", "false", "False"}),
+        transcode_workers=_int_from_env(env, "TRANSCODE_WORKERS", 2, min_value=1, max_value=8),
     )
 
     return Config(
