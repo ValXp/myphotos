@@ -2,22 +2,31 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import videojs from "video.js";
 import "video.js/dist/video-js.css";
-import "videojs-contrib-quality-levels";
-import "videojs-http-source-selector";
 
 const ZOOM_LEVELS = [1, 1.5, 2, 3];
 const DEFAULT_ZOOM_INDEX = 0;
+
+let qualityLevelsPromise: Promise<void> | null = null;
+
+async function ensureQualityLevels(): Promise<void> {
+  if (typeof (videojs as any).getPlugin === "function") {
+    const existing = (videojs as any).getPlugin("qualityLevels");
+    if (existing) {
+      return;
+    }
+  }
+  if (!qualityLevelsPromise) {
+    qualityLevelsPromise = import("videojs-contrib-quality-levels")
+      .then(() => undefined)
+      .catch(() => undefined);
+  }
+  await qualityLevelsPromise;
+}
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
   year: "numeric",
-  timeZone: "UTC"
-});
-const timeFormatter = new Intl.DateTimeFormat("en-US", {
-  hour: "numeric",
-  minute: "2-digit",
-  hour12: true,
   timeZone: "UTC"
 });
 
@@ -81,21 +90,6 @@ function formatDateLabel(asset: ViewerAsset): string {
   return dateFormatter.format(timestamp);
 }
 
-function formatTimeLabel(asset: ViewerAsset): string | null {
-  const timestamp = assetTimestamp(asset);
-  if (!timestamp) {
-    return null;
-  }
-  return timeFormatter.format(timestamp);
-}
-
-function formatDimensions(asset: ViewerAsset): string | null {
-  if (!asset.width || !asset.height) {
-    return null;
-  }
-  return `${asset.width} x ${asset.height}`;
-}
-
 function formatDuration(durationMs: number | null): string | null {
   if (!durationMs || durationMs <= 0) {
     return null;
@@ -130,7 +124,6 @@ function isViewableAsset(asset: ViewerAsset): boolean {
 export function ViewerShell({
   contextLabel,
   emptyMessage,
-  emptySubhead,
   loadingMessage = "Loading viewer...",
   items,
   status,
@@ -146,7 +139,7 @@ export function ViewerShell({
   const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedAssetId = searchParams.get("asset");
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const videoContainerRef = useRef<HTMLDivElement | null>(null);
   const playerRef = useRef<ReturnType<typeof videojs> | null>(null);
   const liveVideoRef = useRef<HTMLVideoElement | null>(null);
   const [isLivePlaying, setIsLivePlaying] = useState(false);
@@ -255,18 +248,13 @@ export function ViewerShell({
 
   const typeLabel = selectedAsset ? formatTypeLabel(selectedAsset.type) : "Asset";
   const dateLabel = selectedAsset ? formatDateLabel(selectedAsset) : "Viewer";
-  const timeLabel = selectedAsset ? formatTimeLabel(selectedAsset) : null;
-  const dimensionLabel = selectedAsset ? formatDimensions(selectedAsset) : null;
   const durationLabel = selectedAsset ? formatDuration(selectedAsset.duration_ms) : null;
-  const detailParts = [timeLabel, dimensionLabel, durationLabel].filter(
-    (value): value is string => !!value
-  );
-  const detailLine = detailParts.length > 0 ? detailParts.join(" | ") : "Details unavailable.";
   const previewAlt = selectedAsset ? `${typeLabel} preview from ${dateLabel}` : "Viewer preview";
   const videoLabel = selectedAsset ? `${typeLabel} playback from ${dateLabel}` : "Video playback";
   const photoSource = selectedAsset
     ? (photoUrl ? photoUrl(selectedAsset.id) : previewUrl(selectedAsset.id))
     : "";
+  const posterSource = selectedAsset ? previewUrl(selectedAsset.id) : "";
 
   const videoSource = selectedAsset && isVideo ? streamUrl(selectedAsset.id) : "";
   const liveSource = selectedAsset && showLiveToggle ? liveUrl?.(selectedAsset.id) ?? "" : "";
@@ -275,253 +263,287 @@ export function ViewerShell({
     if (!selectedAsset || !isVideo) {
       return;
     }
-    const element = videoRef.current;
-    if (!element) {
+    const container = videoContainerRef.current;
+    if (!container) {
       return;
     }
-
-    // Avoid initializing video.js in unit tests (jsdom doesn't fully support media APIs).
-    if (import.meta.env.MODE === "test") {
-      return;
-    }
-
-    // Dispose any previous player (asset switch / unmount).
-    if (playerRef.current) {
-      try {
-        playerRef.current.dispose();
-      } catch {
-        // ignore
-      }
-      playerRef.current = null;
-    }
-
     const source = videoSource;
     if (!source) {
       return;
     }
 
-    // Ensure the element has the video.js class.
-    element.classList.add("video-js");
-    element.classList.add("vjs-default-skin");
+    container.innerHTML = "";
 
-    const type = source.includes(".m3u8") ? "application/x-mpegURL" : "video/mp4";
+    const videoEl = document.createElement("video");
+    videoEl.className = "viewer-media-item video-js vjs-default-skin";
+    videoEl.setAttribute("controls", "true");
+    videoEl.setAttribute("preload", "metadata");
+    videoEl.setAttribute("playsinline", "true");
+    videoEl.setAttribute("aria-label", videoLabel);
+    videoEl.setAttribute("data-stream-src", source);
+    if (posterSource) {
+      videoEl.setAttribute("poster", posterSource);
+    }
+    container.appendChild(videoEl);
 
-    const player = videojs(element, {
-      controls: true,
-      preload: "metadata",
-      playsinline: true,
-      fluid: true,
-      autoplay: true,
-      // Ensure auth cookies are sent for HLS segment/playlist requests.
-      html5: {
-        vhs: {
-          withCredentials: true
-        }
-      },
-      sources: [{ src: source, type }]
-    });
-
-    playerRef.current = player;
-
-    // Try to start playback immediately when the viewer opens.
-    // (Browsers may block autoplay unless muted; if blocked, this is a no-op.)
-    try {
-      player.ready(() => {
-        const el = element as HTMLVideoElement;
-        const maybePromise = el.play?.();
-        if (maybePromise && typeof (maybePromise as Promise<unknown>).catch === "function") {
-          (maybePromise as Promise<unknown>).catch(() => {
-            // ignore autoplay rejection
-          });
-        }
-      });
-    } catch {
-      // ignore
+    // Avoid initializing video.js in unit tests (jsdom doesn't fully support media APIs).
+    if (import.meta.env.MODE === "test") {
+      return () => {
+        container.innerHTML = "";
+      };
     }
 
-    // Add an in-player quality selector next to fullscreen.
-    // We rely on videojs-contrib-quality-levels (VHS populates levels for HLS).
-    try {
-      const controlBar = player.getChild("controlBar") as any;
-      const fs = controlBar?.getChild?.("FullscreenToggle") as any;
-      const barEl = controlBar?.el?.();
-      const fsEl = fs?.el?.();
-      const qualityLevels = (player as any).qualityLevels?.();
+    let cancelled = false;
+    let player: ReturnType<typeof videojs> | null = null;
 
-      if (barEl && fsEl && qualityLevels) {
-        const wrapper = document.createElement("div");
-        wrapper.className = "vjs-quality-select vjs-control";
-
-        const select = document.createElement("select");
-        select.className = "vjs-quality-select-control";
-        select.setAttribute("aria-label", "Quality");
-
-        let autoOpt: HTMLOptionElement | null = null;
-
-        const rebuildOptions = () => {
-          const previous = select.value || "auto";
-
-          type LevelInfo = {
-            index: number;
-            height?: number;
-            videoRange?: string;
-          };
-
-          const levels: LevelInfo[] = [];
-          for (let i = 0; i < qualityLevels.length; i += 1) {
-            const lvl = qualityLevels[i];
-            const videoRange = (lvl as any)?.playlist?.attributes?.["VIDEO-RANGE"]; // HLG/PQ
-            levels.push({ index: i, height: lvl?.height, videoRange });
-          }
-
-          const sorted = levels
-            .filter((lvl) => typeof lvl.height === "number")
-            .sort((a, b) => {
-              const ha = a.height ?? 0;
-              const hb = b.height ?? 0;
-              if (ha !== hb) {
-                return ha - hb;
-              }
-              // SDR before HDR at same res
-              const ar = (a.videoRange || "").toUpperCase();
-              const br = (b.videoRange || "").toUpperCase();
-              return (ar ? 1 : 0) - (br ? 1 : 0);
-            });
-
-          select.innerHTML = "";
-          autoOpt = document.createElement("option");
-          autoOpt.value = "auto";
-          autoOpt.textContent = "Auto";
-          select.appendChild(autoOpt);
-
-          for (const lvl of sorted) {
-            const h = lvl.height as number;
-            const vr = (lvl.videoRange || "").toUpperCase();
-            const opt = document.createElement("option");
-            opt.value = String(lvl.index);
-            opt.textContent = vr ? `${h}p HDR` : `${h}p`;
-            select.appendChild(opt);
-          }
-
-          // Restore selection if possible; otherwise default to auto.
-          const stillExists = Array.from(select.options).some((opt) => opt.value === previous);
-          select.value = stillExists ? previous : "auto";
-        };
-
-        const updateAutoLabel = () => {
-          if (!autoOpt) {
-            return;
-          }
-          if (select.value !== "auto") {
-            autoOpt.textContent = "Auto";
-            return;
-          }
-          try {
-            // @ts-expect-error internal VHS bits
-            const vhs = (player.tech(true) as any)?.vhs;
-            const media = vhs?.playlistController_?.media?.();
-            const height = media?.attributes?.RESOLUTION?.height;
-            const vr = (media?.attributes?.["VIDEO-RANGE"] || "").toUpperCase();
-            if (typeof height === "number") {
-              autoOpt.textContent = vr ? `Auto (${height}p HDR)` : `Auto (${height}p)`;
-            } else {
-              autoOpt.textContent = "Auto";
-            }
-          } catch {
-            autoOpt.textContent = "Auto";
-          }
-        };
-
-        const applySelection = (value: string) => {
-          if (value === "auto") {
-            // Default auto: enable SDR levels; keep HDR levels disabled unless user explicitly chooses them.
-            for (let i = 0; i < qualityLevels.length; i += 1) {
-              const lvl = qualityLevels[i] as any;
-              const vr = (lvl?.playlist?.attributes?.["VIDEO-RANGE"] || "").toUpperCase();
-              lvl.enabled = !vr;
-            }
-          } else {
-            const targetIndex = Number(value);
-            for (let i = 0; i < qualityLevels.length; i += 1) {
-              const lvl = qualityLevels[i] as any;
-              lvl.enabled = i === targetIndex;
-            }
-          }
-
-          // Force VHS to start fetching segments for the newly enabled rendition.
-          // Without this, previously-buffered segments can continue playing for a while.
-          try {
-            const t = player.currentTime();
-            // @ts-expect-error internal VHS bits
-            const vhs = (player.tech(true) as any)?.vhs;
-            const loader =
-              vhs?.playlistController_?.mainSegmentLoader_ ??
-              vhs?.playlistController_?.audioSegmentLoader_;
-            loader?.resetEverything?.();
-            // Keep playback position.
-            player.currentTime(t);
-            player.play();
-          } catch {
-            // Best-effort: seek-to-self to encourage a re-request.
-            try {
-              const t = player.currentTime();
-              player.currentTime(t);
-              player.play();
-            } catch {
-              // ignore
-            }
-          }
-        };
-
-        select.addEventListener("change", () => {
-          applySelection(select.value);
-          updateAutoLabel();
-        });
-
-        rebuildOptions();
-        wrapper.appendChild(select);
-        barEl.insertBefore(wrapper, fsEl);
-        updateAutoLabel();
-
-        // Keep options up-to-date as levels appear.
-        // Debounce because VHS can add levels in quick bursts.
-        let rebuildTimer: number | null = null;
-        const scheduleRebuild = () => {
-          if (rebuildTimer !== null) {
-            window.clearTimeout(rebuildTimer);
-          }
-          rebuildTimer = window.setTimeout(() => {
-            rebuildOptions();
-            updateAutoLabel();
-            rebuildTimer = null;
-          }, 150);
-        };
-
-        if (typeof qualityLevels.on === "function") {
-          qualityLevels.on("addqualitylevel", scheduleRebuild);
-          qualityLevels.on("removequalitylevel", scheduleRebuild);
-        }
-
-        // Update Auto(...) label as VHS switches renditions.
-        player.on("timeupdate", updateAutoLabel);
-        player.on("loadedmetadata", () => {
-          rebuildOptions();
-          updateAutoLabel();
-        });
+    void (async () => {
+      await ensureQualityLevels();
+      if (cancelled) {
+        return;
       }
-    } catch {
-      // ignore
-    }
 
-    return () => {
+      const type = source.includes(".m3u8") ? "application/x-mpegURL" : "video/mp4";
+
+      player = videojs(videoEl, {
+        controls: true,
+        preload: "metadata",
+        playsinline: true,
+        fluid: true,
+        autoplay: true,
+        // Ensure auth cookies are sent for HLS segment/playlist requests.
+        html5: {
+          vhs: {
+            withCredentials: true
+          }
+        },
+        sources: [{ src: source, type }]
+      });
+
+      playerRef.current = player;
+
+      // Try to start playback immediately when the viewer opens.
+      // (Browsers may block autoplay unless muted; if blocked, this is a no-op.)
       try {
-        player.dispose();
+        player.ready(() => {
+          const maybePromise = videoEl.play?.();
+          if (maybePromise && typeof (maybePromise as Promise<unknown>).catch === "function") {
+            (maybePromise as Promise<unknown>).catch(() => {
+              // ignore autoplay rejection
+            });
+          }
+        });
       } catch {
         // ignore
       }
+
+      // Add an in-player quality selector next to fullscreen.
+      // We rely on videojs-contrib-quality-levels (VHS populates levels for HLS).
+      try {
+        const controlBar = player.getChild("controlBar") as any;
+        const fs = controlBar?.getChild?.("FullscreenToggle") as any;
+        const barEl = controlBar?.el?.();
+        const fsEl = fs?.el?.();
+        const qualityLevels = (player as any).qualityLevels?.();
+
+        if (barEl && fsEl && qualityLevels) {
+          const wrapper = document.createElement("div");
+          wrapper.className = "vjs-quality-select vjs-control";
+
+          const select = document.createElement("select");
+          select.className = "vjs-quality-select-control";
+          select.setAttribute("aria-label", "Quality");
+
+          const keepControlsVisible = () => {
+            player.addClass("vjs-quality-focus");
+            try {
+              player.userActive(true);
+            } catch {
+              // ignore
+            }
+          };
+
+          const releaseControls = () => {
+            player.removeClass("vjs-quality-focus");
+          };
+
+          select.addEventListener("focus", keepControlsVisible);
+          select.addEventListener("blur", releaseControls);
+          select.addEventListener("pointerdown", keepControlsVisible);
+          select.addEventListener("pointerup", keepControlsVisible);
+
+          let autoOpt: HTMLOptionElement | null = null;
+
+          const rebuildOptions = () => {
+            const previous = select.value || "auto";
+
+            type LevelInfo = {
+              index: number;
+              height?: number;
+              videoRange?: string;
+            };
+
+            const levels: LevelInfo[] = [];
+            for (let i = 0; i < qualityLevels.length; i += 1) {
+              const lvl = qualityLevels[i];
+              const videoRange = (lvl as any)?.playlist?.attributes?.["VIDEO-RANGE"]; // HLG/PQ
+              levels.push({ index: i, height: lvl?.height, videoRange });
+            }
+
+            const sorted = levels
+              .filter((lvl) => typeof lvl.height === "number")
+              .sort((a, b) => {
+                const ha = a.height ?? 0;
+                const hb = b.height ?? 0;
+                if (ha !== hb) {
+                  return ha - hb;
+                }
+                // SDR before HDR at same res
+                const ar = (a.videoRange || "").toUpperCase();
+                const br = (b.videoRange || "").toUpperCase();
+                return (ar ? 1 : 0) - (br ? 1 : 0);
+              });
+
+            select.innerHTML = "";
+            autoOpt = document.createElement("option");
+            autoOpt.value = "auto";
+            autoOpt.textContent = "Auto";
+            select.appendChild(autoOpt);
+
+            for (const lvl of sorted) {
+              const h = lvl.height as number;
+              const vr = (lvl.videoRange || "").toUpperCase();
+              const opt = document.createElement("option");
+              opt.value = String(lvl.index);
+              opt.textContent = vr ? `${h}p HDR` : `${h}p`;
+              select.appendChild(opt);
+            }
+
+            // Restore selection if possible; otherwise default to auto.
+            const stillExists = Array.from(select.options).some((opt) => opt.value === previous);
+            select.value = stillExists ? previous : "auto";
+          };
+
+          const updateAutoLabel = () => {
+            if (!autoOpt) {
+              return;
+            }
+            if (select.value !== "auto") {
+              autoOpt.textContent = "Auto";
+              return;
+            }
+            try {
+              // @ts-expect-error internal VHS bits
+              const vhs = (player.tech(true) as any)?.vhs;
+              const media = vhs?.playlistController_?.media?.();
+              const height = media?.attributes?.RESOLUTION?.height;
+              const vr = (media?.attributes?.["VIDEO-RANGE"] || "").toUpperCase();
+              if (typeof height === "number") {
+                autoOpt.textContent = vr ? `Auto (${height}p HDR)` : `Auto (${height}p)`;
+              } else {
+                autoOpt.textContent = "Auto";
+              }
+            } catch {
+              autoOpt.textContent = "Auto";
+            }
+          };
+
+          const applySelection = (value: string) => {
+            if (value === "auto") {
+              // Default auto: enable SDR levels; keep HDR levels disabled unless user explicitly chooses them.
+              for (let i = 0; i < qualityLevels.length; i += 1) {
+                const lvl = qualityLevels[i] as any;
+                const vr = (lvl?.playlist?.attributes?.["VIDEO-RANGE"] || "").toUpperCase();
+                lvl.enabled = !vr;
+              }
+            } else {
+              const targetIndex = Number(value);
+              for (let i = 0; i < qualityLevels.length; i += 1) {
+                const lvl = qualityLevels[i] as any;
+                lvl.enabled = i === targetIndex;
+              }
+            }
+
+            // Force VHS to start fetching segments for the newly enabled rendition.
+            // Without this, previously-buffered segments can continue playing for a while.
+            try {
+              const t = player.currentTime();
+              // @ts-expect-error internal VHS bits
+              const vhs = (player.tech(true) as any)?.vhs;
+              const loader =
+                vhs?.playlistController_?.mainSegmentLoader_ ??
+                vhs?.playlistController_?.audioSegmentLoader_;
+              loader?.resetEverything?.();
+              // Keep playback position.
+              player.currentTime(t);
+              player.play();
+            } catch {
+              // Best-effort: seek-to-self to encourage a re-request.
+              try {
+                const t = player.currentTime();
+                player.currentTime(t);
+                player.play();
+              } catch {
+                // ignore
+              }
+            }
+          };
+
+          select.addEventListener("change", () => {
+            applySelection(select.value);
+            updateAutoLabel();
+          });
+
+          rebuildOptions();
+          wrapper.appendChild(select);
+          barEl.insertBefore(wrapper, fsEl);
+          updateAutoLabel();
+
+          // Keep options up-to-date as levels appear.
+          // Debounce because VHS can add levels in quick bursts.
+          let rebuildTimer: number | null = null;
+          const scheduleRebuild = () => {
+            if (rebuildTimer !== null) {
+              window.clearTimeout(rebuildTimer);
+            }
+            rebuildTimer = window.setTimeout(() => {
+              rebuildOptions();
+              updateAutoLabel();
+              rebuildTimer = null;
+            }, 150);
+          };
+
+          if (typeof qualityLevels.on === "function") {
+            qualityLevels.on("addqualitylevel", scheduleRebuild);
+            qualityLevels.on("removequalitylevel", scheduleRebuild);
+          }
+
+          // Update Auto(...) label as VHS switches renditions.
+          player.on("timeupdate", updateAutoLabel);
+          player.on("loadedmetadata", () => {
+            rebuildOptions();
+            updateAutoLabel();
+          });
+        }
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (player) {
+        try {
+          player.dispose();
+        } catch {
+          // ignore
+        }
+      }
+      if (container.contains(videoEl)) {
+        container.removeChild(videoEl);
+      }
       playerRef.current = null;
     };
-  }, [isVideo, selectedAsset, videoSource]);
+  }, [isVideo, posterSource, selectedAsset?.id, videoLabel, videoSource]);
 
   useEffect(() => {
     const video = liveVideoRef.current;
@@ -571,7 +593,7 @@ export function ViewerShell({
   // (quality is displayed in the in-player selector)
 
   return (
-    <section className="page viewer">
+    <section className="page viewer" aria-label={contextLabel}>
       <div className="viewer-stage">
         {error && (
           <div className="status error" role="alert">
@@ -579,6 +601,11 @@ export function ViewerShell({
           </div>
         )}
         <div className={`viewer-media${isVideo ? " is-video" : ""}`}>
+          {backLink && (
+            <Link className="viewer-back ghost" to={backLink.to}>
+              {backLink.label}
+            </Link>
+          )}
           {isLoading && !hasItems && (
             <div className="viewer-placeholder" role="status">
               {loadingMessage}
@@ -592,17 +619,7 @@ export function ViewerShell({
           {selectedAsset && (
             <>
               {isVideo ? (
-                <video
-                  ref={videoRef}
-                  key={selectedAsset.id}
-                  className="viewer-media-item"
-                  controls
-                  preload="metadata"
-                  playsInline
-                  poster={previewUrl(selectedAsset.id)}
-                  aria-label={videoLabel}
-                  data-stream-src={videoSource}
-                />
+                <div ref={videoContainerRef} className="viewer-media-video" />
               ) : isLivePhoto ? (
                 <div className={`viewer-live-photo${isLivePlaying ? " is-playing" : ""}`}>
                   <img
@@ -657,6 +674,19 @@ export function ViewerShell({
             </button>
           </div>
         </div>
+        {showLiveToggle && (
+          <div className="viewer-live-controls">
+            <button
+              className="ghost"
+              onClick={handleToggleLive}
+              disabled={!canPlayLive}
+              aria-pressed={isLivePlaying}
+            >
+              {isLivePlaying ? "Stop Live" : "Play Live"}
+            </button>
+            {!canPlayLive && <span className="hint">Live video processing</span>}
+          </div>
+        )}
         {showFooterNav && (
           <div className="viewer-controls">
             <div className="viewer-nav">
@@ -704,46 +734,10 @@ export function ViewerShell({
                 </button>
               </div>
             </div>
-            {/* Quality selector rendered in the meta panel so it also shows when footer nav is hidden. */}
           </div>
         )}
         {nextCursor && hasItems && (
           <p className="hint">More assets are available in the timeline.</p>
-        )}
-      </div>
-      <div className="viewer-meta">
-        <p className="eyebrow">{contextLabel}</p>
-        <h1>{dateLabel}</h1>
-        <p className="subhead">
-          {selectedAsset ? `${typeLabel} | ${detailLine}` : emptySubhead}
-        </p>
-        <div className="pill-group">
-          <span className="pill">{typeLabel}</span>
-          {selectedIndex >= 0 && (
-            <span className="pill">{selectedIndex + 1} of {viewableItems.length}</span>
-          )}
-          {selectedAsset?.live_photo_video_id && <span className="pill">Live pairing</span>}
-        </div>
-
-        {showLiveToggle && (
-          <div className="viewer-live-controls">
-            <button
-              className="ghost"
-              onClick={handleToggleLive}
-              disabled={!canPlayLive}
-              aria-pressed={isLivePlaying}
-            >
-              {isLivePlaying ? "Stop Live" : "Play Live"}
-            </button>
-            {!canPlayLive && <span className="hint">Live video processing</span>}
-          </div>
-        )}
-
-        {/* Quality selector is rendered by video.js in the player control bar. */}
-        {backLink && (
-          <Link className="ghost" to={backLink.to}>
-            {backLink.label}
-          </Link>
         )}
       </div>
     </section>
