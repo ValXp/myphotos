@@ -316,6 +316,8 @@ export function ViewerShell({
         select.className = "vjs-quality-select-control";
         select.setAttribute("aria-label", "Quality");
 
+        let autoOpt: HTMLOptionElement | null = null;
+
         const rebuildOptions = () => {
           const levels: Array<{ index: number; height?: number }> = [];
           for (let i = 0; i < qualityLevels.length; i += 1) {
@@ -332,7 +334,7 @@ export function ViewerShell({
           const heights = Array.from(unique.keys()).sort((a, b) => a - b);
 
           select.innerHTML = "";
-          const autoOpt = document.createElement("option");
+          autoOpt = document.createElement("option");
           autoOpt.value = "auto";
           autoOpt.textContent = "Auto";
           select.appendChild(autoOpt);
@@ -341,6 +343,29 @@ export function ViewerShell({
             opt.value = String(h);
             opt.textContent = `${h}p`;
             select.appendChild(opt);
+          }
+        };
+
+        const updateAutoLabel = () => {
+          if (!autoOpt) {
+            return;
+          }
+          if (select.value !== "auto") {
+            autoOpt.textContent = "Auto";
+            return;
+          }
+          try {
+            // @ts-expect-error internal VHS bits
+            const vhs = (player.tech(true) as any)?.vhs;
+            const media = vhs?.playlistController_?.media?.();
+            const height = media?.attributes?.RESOLUTION?.height;
+            if (typeof height === "number") {
+              autoOpt.textContent = `Auto (${height}p)`;
+            } else {
+              autoOpt.textContent = "Auto";
+            }
+          } catch {
+            autoOpt.textContent = "Auto";
           }
         };
 
@@ -384,17 +409,29 @@ export function ViewerShell({
 
         select.addEventListener("change", () => {
           applySelection(select.value);
+          updateAutoLabel();
         });
 
         rebuildOptions();
         wrapper.appendChild(select);
         barEl.insertBefore(wrapper, fsEl);
+        updateAutoLabel();
 
         // Keep options up-to-date as levels appear.
         if (typeof qualityLevels.on === "function") {
-          qualityLevels.on("addqualitylevel", rebuildOptions);
-          qualityLevels.on("removequalitylevel", rebuildOptions);
+          qualityLevels.on("addqualitylevel", () => {
+            rebuildOptions();
+            updateAutoLabel();
+          });
+          qualityLevels.on("removequalitylevel", () => {
+            rebuildOptions();
+            updateAutoLabel();
+          });
         }
+
+        // Update Auto(...) label as VHS switches renditions.
+        player.on("timeupdate", updateAutoLabel);
+        player.on("loadedmetadata", updateAutoLabel);
       }
     } catch {
       // ignore
@@ -422,7 +459,7 @@ export function ViewerShell({
     setZoomIndex(DEFAULT_ZOOM_INDEX);
   }, []);
 
-  const [qualityLabel, setQualityLabel] = useState<string | null>(null);
+  // (quality is displayed in the in-player selector)
 
   return (
     <section className="page viewer">
