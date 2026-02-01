@@ -321,29 +321,45 @@ export function ViewerShell({
         const rebuildOptions = () => {
           const previous = select.value || "auto";
 
-          const levels: Array<{ index: number; height?: number }> = [];
+          type LevelInfo = {
+            index: number;
+            height?: number;
+            videoRange?: string;
+          };
+
+          const levels: LevelInfo[] = [];
           for (let i = 0; i < qualityLevels.length; i += 1) {
             const lvl = qualityLevels[i];
-            levels.push({ index: i, height: lvl?.height });
+            const videoRange = (lvl as any)?.playlist?.attributes?.["VIDEO-RANGE"]; // HLG/PQ
+            levels.push({ index: i, height: lvl?.height, videoRange });
           }
-          // unique + sort by height
-          const unique = new Map<number, number>();
-          for (const lvl of levels) {
-            if (typeof lvl.height === "number" && !unique.has(lvl.height)) {
-              unique.set(lvl.height, lvl.index);
-            }
-          }
-          const heights = Array.from(unique.keys()).sort((a, b) => a - b);
+
+          const sorted = levels
+            .filter((lvl) => typeof lvl.height === "number")
+            .sort((a, b) => {
+              const ha = a.height ?? 0;
+              const hb = b.height ?? 0;
+              if (ha !== hb) {
+                return ha - hb;
+              }
+              // SDR before HDR at same res
+              const ar = (a.videoRange || "").toUpperCase();
+              const br = (b.videoRange || "").toUpperCase();
+              return (ar ? 1 : 0) - (br ? 1 : 0);
+            });
 
           select.innerHTML = "";
           autoOpt = document.createElement("option");
           autoOpt.value = "auto";
           autoOpt.textContent = "Auto";
           select.appendChild(autoOpt);
-          for (const h of heights) {
+
+          for (const lvl of sorted) {
+            const h = lvl.height as number;
+            const vr = (lvl.videoRange || "").toUpperCase();
             const opt = document.createElement("option");
-            opt.value = String(h);
-            opt.textContent = `${h}p`;
+            opt.value = String(lvl.index);
+            opt.textContent = vr ? `${h}p HDR` : `${h}p`;
             select.appendChild(opt);
           }
 
@@ -365,8 +381,9 @@ export function ViewerShell({
             const vhs = (player.tech(true) as any)?.vhs;
             const media = vhs?.playlistController_?.media?.();
             const height = media?.attributes?.RESOLUTION?.height;
+            const vr = (media?.attributes?.["VIDEO-RANGE"] || "").toUpperCase();
             if (typeof height === "number") {
-              autoOpt.textContent = `Auto (${height}p)`;
+              autoOpt.textContent = vr ? `Auto (${height}p HDR)` : `Auto (${height}p)`;
             } else {
               autoOpt.textContent = "Auto";
             }
@@ -377,14 +394,17 @@ export function ViewerShell({
 
         const applySelection = (value: string) => {
           if (value === "auto") {
+            // Default auto: enable SDR levels; keep HDR levels disabled unless user explicitly chooses them.
             for (let i = 0; i < qualityLevels.length; i += 1) {
-              qualityLevels[i].enabled = true;
+              const lvl = qualityLevels[i] as any;
+              const vr = (lvl?.playlist?.attributes?.["VIDEO-RANGE"] || "").toUpperCase();
+              lvl.enabled = !vr;
             }
           } else {
-            const targetH = Number(value);
+            const targetIndex = Number(value);
             for (let i = 0; i < qualityLevels.length; i += 1) {
-              const lvl = qualityLevels[i];
-              lvl.enabled = lvl?.height === targetH;
+              const lvl = qualityLevels[i] as any;
+              lvl.enabled = i === targetIndex;
             }
           }
 

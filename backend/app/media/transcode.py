@@ -90,6 +90,10 @@ def build_master_manifest(profiles: Iterable[VariantProfile]) -> str:
         stream_inf = f"#EXT-X-STREAM-INF:BANDWIDTH={bandwidth}"
         if profile.width is not None and profile.height is not None:
             stream_inf = f"{stream_inf},RESOLUTION={profile.width}x{profile.height}"
+        # Hint to players that this stream is HDR.
+        # (Supported by HLS spec; not all players use it, but it helps identify HDR renditions.)
+        if getattr(profile, "hdr", False):
+            stream_inf = f"{stream_inf},VIDEO-RANGE=HLG"
         lines.append(stream_inf)
         lines.append(profile.filename())
     return "\n".join(lines) + "\n"
