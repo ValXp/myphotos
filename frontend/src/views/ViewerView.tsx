@@ -63,6 +63,10 @@ function streamUrl(assetId: string): string {
   return buildApiUrl(`/assets/${assetId}/stream/master.m3u8`);
 }
 
+function liveUrl(assetId: string): string {
+  return buildApiUrl(`/assets/${assetId}/live`);
+}
+
 async function fetchAssets(): Promise<AssetsResponse> {
   const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
   return requestJson<AssetsResponse>(`/assets?${params.toString()}`, { method: "GET" });
@@ -109,6 +113,7 @@ export function ViewerView() {
       previewUrl={previewUrl}
       photoUrl={originalUrl}
       streamUrl={streamUrl}
+      liveUrl={liveUrl}
       backLink={{ to: "/app/timeline", label: "Back to timeline" }}
     />
   );

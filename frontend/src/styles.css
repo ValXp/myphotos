@@ -334,6 +334,10 @@ button {
   cursor: pointer;
 }
 
+.media-thumb.is-disabled {
+  cursor: not-allowed;
+}
+
 .media-thumb:focus-visible {
   outline: 3px solid rgba(31, 122, 122, 0.35);
   outline-offset: 4px;
@@ -545,6 +549,35 @@ button {
   display: block;
   transform-origin: center;
   transition: transform 0.25s ease;
+}
+
+.viewer-live-photo {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.viewer-live-photo .viewer-media-item {
+  position: absolute;
+  inset: 0;
+}
+
+.viewer-live-video {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.viewer-live-video.is-playing {
+  opacity: 1;
+}
+
+.viewer-live-controls {
+  margin-top: 16px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .viewer-media-photo {
