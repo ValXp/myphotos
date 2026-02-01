@@ -617,9 +617,10 @@ button {
 
 /* video.js inline quality selector */
 .vjs-quality-select {
-  /* Fixed width so it doesn't overlap fullscreen, but wide enough to show
-     "Auto (720p)" without truncating to "Au". */
-  width: 140px;
+  /* video.js controlbar uses flex; prevent this control from shrinking and
+     keep it wide enough to show Auto(####p). */
+  flex: 0 0 170px;
+  width: 170px;
   display: inline-flex;
   align-items: center;
   padding: 0 6px;
