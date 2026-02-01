@@ -47,7 +47,7 @@ describe("ViewerView", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Owner viewer")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Owner viewer")).toBeInTheDocument();
     expect(
       screen.getByText(/no assets yet\. add photos or videos to start viewing\./i)
     ).toBeInTheDocument();

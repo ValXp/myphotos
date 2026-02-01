@@ -90,7 +90,10 @@ function formatDateLabel(asset: ViewerAsset): string {
   return dateFormatter.format(timestamp);
 }
 
-function formatDuration(durationMs: number | null): string | null {
+function formatDuration(durationMs: number | null, type: AssetType): string | null {
+  if (type !== "video") {
+    return null;
+  }
   if (!durationMs || durationMs <= 0) {
     return null;
   }
@@ -248,7 +251,9 @@ export function ViewerShell({
 
   const typeLabel = selectedAsset ? formatTypeLabel(selectedAsset.type) : "Asset";
   const dateLabel = selectedAsset ? formatDateLabel(selectedAsset) : "Viewer";
-  const durationLabel = selectedAsset ? formatDuration(selectedAsset.duration_ms) : null;
+  const durationLabel = selectedAsset
+    ? formatDuration(selectedAsset.duration_ms, selectedAsset.type)
+    : null;
   const previewAlt = selectedAsset ? `${typeLabel} preview from ${dateLabel}` : "Viewer preview";
   const videoLabel = selectedAsset ? `${typeLabel} playback from ${dateLabel}` : "Video playback";
   const photoSource = selectedAsset
