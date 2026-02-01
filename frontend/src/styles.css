@@ -617,9 +617,9 @@ button {
 
 /* video.js inline quality selector */
 .vjs-quality-select {
-  /* video.js controlbar controls are fixed-width; give this control its own width
-     so it doesn't overflow on top of the fullscreen button. */
-  width: 110px;
+  /* Fixed width so it doesn't overlap fullscreen, but wide enough to show
+     "Auto (720p)" without truncating to "Au". */
+  width: 140px;
   display: inline-flex;
   align-items: center;
   padding: 0 6px;
@@ -636,6 +636,9 @@ button {
   font-size: 12px;
   padding: 2px 6px;
   box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .vjs-quality-select-control:focus {

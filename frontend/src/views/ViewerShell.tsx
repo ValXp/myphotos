@@ -319,6 +319,8 @@ export function ViewerShell({
         let autoOpt: HTMLOptionElement | null = null;
 
         const rebuildOptions = () => {
+          const previous = select.value || "auto";
+
           const levels: Array<{ index: number; height?: number }> = [];
           for (let i = 0; i < qualityLevels.length; i += 1) {
             const lvl = qualityLevels[i];
@@ -344,6 +346,10 @@ export function ViewerShell({
             opt.textContent = `${h}p`;
             select.appendChild(opt);
           }
+
+          // Restore selection if possible; otherwise default to auto.
+          const stillExists = Array.from(select.options).some((opt) => opt.value === previous);
+          select.value = stillExists ? previous : "auto";
         };
 
         const updateAutoLabel = () => {
@@ -418,20 +424,30 @@ export function ViewerShell({
         updateAutoLabel();
 
         // Keep options up-to-date as levels appear.
+        // Debounce because VHS can add levels in quick bursts.
+        let rebuildTimer: number | null = null;
+        const scheduleRebuild = () => {
+          if (rebuildTimer !== null) {
+            window.clearTimeout(rebuildTimer);
+          }
+          rebuildTimer = window.setTimeout(() => {
+            rebuildOptions();
+            updateAutoLabel();
+            rebuildTimer = null;
+          }, 150);
+        };
+
         if (typeof qualityLevels.on === "function") {
-          qualityLevels.on("addqualitylevel", () => {
-            rebuildOptions();
-            updateAutoLabel();
-          });
-          qualityLevels.on("removequalitylevel", () => {
-            rebuildOptions();
-            updateAutoLabel();
-          });
+          qualityLevels.on("addqualitylevel", scheduleRebuild);
+          qualityLevels.on("removequalitylevel", scheduleRebuild);
         }
 
         // Update Auto(...) label as VHS switches renditions.
         player.on("timeupdate", updateAutoLabel);
-        player.on("loadedmetadata", updateAutoLabel);
+        player.on("loadedmetadata", () => {
+          rebuildOptions();
+          updateAutoLabel();
+        });
       }
     } catch {
       // ignore
