@@ -156,7 +156,8 @@ describe("App flows", () => {
           duration_ms: 64000,
           width: 1920,
           height: 1080,
-          live_photo_video_id: null
+          live_photo_video_id: null,
+          ready: { stream: true }
         },
         {
           id: "asset-public-live",
@@ -166,7 +167,8 @@ describe("App flows", () => {
           duration_ms: null,
           width: 3024,
           height: 4032,
-          live_photo_video_id: "asset-live-video"
+          live_photo_video_id: "asset-live-video",
+          ready: { live: true }
         }
       ]
     };
@@ -231,7 +233,8 @@ describe("App flows", () => {
           duration_ms: null,
           width: 4032,
           height: 3024,
-          live_photo_video_id: null
+          live_photo_video_id: null,
+          ready: { thumb: true }
         },
         {
           id: "asset-owner-video",
@@ -241,7 +244,8 @@ describe("App flows", () => {
           duration_ms: 64000,
           width: 1920,
           height: 1080,
-          live_photo_video_id: null
+          live_photo_video_id: null,
+          ready: { stream: true }
         }
       ],
       next_cursor: null
@@ -308,6 +312,183 @@ describe("App flows", () => {
       "poster",
       expect.stringContaining("/assets/asset-owner-video/thumb")
     );
+  });
+
+  it("toggles live photo playback in the viewer", async () => {
+    mockedSessionStatus.mockResolvedValue(true);
+
+    const assetsPayload = {
+      items: [
+        {
+          id: "asset-live-1",
+          type: "live_photo",
+          captured_at: "2026-01-24T12:00:00Z",
+          created_at: "2026-01-24T12:00:00Z",
+          duration_ms: null,
+          width: 3024,
+          height: 4032,
+          live_photo_video_id: "asset-live-1-video",
+          ready: { live: true }
+        }
+      ],
+      next_cursor: null
+    };
+
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.includes("/admin/index/overview")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => ({
+            scan: { status: "idle", job_id: null },
+            assets: { count: 0 },
+            jobs: { metadata: {}, thumb: {}, transcode: {} },
+            active_jobs: 0
+          })
+        });
+      }
+      if (url.includes("/assets?")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => assetsPayload
+        });
+      }
+      if (url.includes("/albums")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => ({ items: [] })
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({})
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { container } = render(
+      <MemoryRouter initialEntries={["/app/timeline?viewer=1&asset=asset-live-1"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    const playButton = await screen.findByRole("button", { name: /play live/i });
+    expect(playButton).toBeEnabled();
+
+    fireEvent.click(playButton);
+
+    await waitFor(() => {
+      expect(playButton).toHaveAttribute("aria-pressed", "true");
+    });
+    expect(container.querySelector("video.viewer-live-video.is-playing")).toBeInTheDocument();
+  });
+
+  it("skips unready videos when navigating the viewer", async () => {
+    mockedSessionStatus.mockResolvedValue(true);
+
+    const assetPayload = {
+      items: [
+        {
+          id: "asset-photo-1",
+          type: "photo",
+          captured_at: "2026-01-26T09:15:00Z",
+          created_at: "2026-01-26T09:15:00Z",
+          duration_ms: null,
+          width: 4032,
+          height: 3024,
+          live_photo_video_id: null,
+          ready: { thumb: true }
+        },
+        {
+          id: "asset-video-unready",
+          type: "video",
+          captured_at: "2026-01-25T11:30:00Z",
+          created_at: "2026-01-25T11:30:00Z",
+          duration_ms: 45000,
+          width: 1920,
+          height: 1080,
+          live_photo_video_id: null,
+          ready: { stream: false }
+        },
+        {
+          id: "asset-photo-2",
+          type: "photo",
+          captured_at: "2026-01-24T07:00:00Z",
+          created_at: "2026-01-24T07:00:00Z",
+          duration_ms: null,
+          width: 4032,
+          height: 3024,
+          live_photo_video_id: null,
+          ready: { thumb: true }
+        }
+      ],
+      next_cursor: null
+    };
+
+    const albumPayload = { items: [] };
+
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.includes("/admin/index/overview")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => ({
+            scan: { status: "idle", job_id: null },
+            assets: { count: 0 },
+            jobs: { metadata: {}, thumb: {}, transcode: {} },
+            active_jobs: 0
+          })
+        });
+      }
+      if (url.includes("/assets?")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => assetPayload
+        });
+      }
+      if (url.includes("/albums")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => albumPayload
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({})
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <MemoryRouter initialEntries={["/app/timeline?viewer=1&asset=asset-photo-1"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    await screen.findByRole("img", { name: /photo preview from jan 26, 2026/i });
+
+    const nextButton = await screen.findByRole("button", { name: /next asset/i });
+    fireEvent.click(nextButton);
+
+    expect(
+      await screen.findByRole("img", { name: /photo preview from jan 24, 2026/i })
+    ).toBeInTheDocument();
   });
 
   it("starts and completes public ZIP downloads", async () => {
@@ -513,7 +694,8 @@ describe("App flows", () => {
           duration_ms: null,
           width: 4032,
           height: 3024,
-          live_photo_video_id: null
+          live_photo_video_id: null,
+          ready: { thumb: true }
         },
         {
           id: "asset-2",
@@ -523,7 +705,8 @@ describe("App flows", () => {
           duration_ms: 128000,
           width: 1920,
           height: 1080,
-          live_photo_video_id: null
+          live_photo_video_id: null,
+          ready: { stream: true }
         },
         {
           id: "asset-3",
@@ -533,7 +716,8 @@ describe("App flows", () => {
           duration_ms: null,
           width: 3024,
           height: 4032,
-          live_photo_video_id: "asset-3-video"
+          live_photo_video_id: "asset-3-video",
+          ready: { live: true }
         }
       ],
       next_cursor: null

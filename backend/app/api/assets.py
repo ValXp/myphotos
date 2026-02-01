@@ -359,6 +359,7 @@ def _serialize_asset_summary(
 
     has_thumb = has_variant(AssetVariantKind.thumb, "thumb_md")
     has_stream = has_variant(AssetVariantKind.video_transcode)
+    has_live = has_variant(AssetVariantKind.live_video)
 
     return {
         "id": asset.id,
@@ -372,6 +373,7 @@ def _serialize_asset_summary(
         "ready": {
             "thumb": has_thumb,
             "stream": has_stream,
+            "live": has_live,
         },
         "processing": {
             "metadata": job_state("metadata"),

@@ -32,6 +32,11 @@ export type ViewerAsset = {
   width: number | null;
   height: number | null;
   live_photo_video_id: string | null;
+  ready?: {
+    thumb?: boolean;
+    stream?: boolean;
+    live?: boolean;
+  };
 };
 
 export type ViewerStatus = "idle" | "loading" | "ready" | "error";
@@ -48,6 +53,7 @@ type ViewerShellProps = {
   previewUrl: (assetId: string) => string;
   photoUrl?: (assetId: string) => string;
   streamUrl: (assetId: string) => string;
+  liveUrl?: (assetId: string) => string;
   backLink?: {
     to: string;
     label: string;
@@ -114,6 +120,13 @@ function formatTypeLabel(type: AssetType): string {
   return "Photo";
 }
 
+function isViewableAsset(asset: ViewerAsset): boolean {
+  if (asset.type !== "video") {
+    return true;
+  }
+  return !!asset.ready?.stream;
+}
+
 export function ViewerShell({
   contextLabel,
   emptyMessage,
@@ -126,6 +139,7 @@ export function ViewerShell({
   previewUrl,
   photoUrl,
   streamUrl,
+  liveUrl,
   backLink,
   showFooterNav = true
 }: ViewerShellProps) {
@@ -134,26 +148,30 @@ export function ViewerShell({
   const selectedAssetId = searchParams.get("asset");
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const playerRef = useRef<ReturnType<typeof videojs> | null>(null);
+  const liveVideoRef = useRef<HTMLVideoElement | null>(null);
+  const [isLivePlaying, setIsLivePlaying] = useState(false);
+
+  const viewableItems = useMemo(() => items.filter(isViewableAsset), [items]);
 
   const paramIndex = useMemo(() => {
     if (!selectedAssetId) {
       return -1;
     }
-    return items.findIndex((asset) => asset.id === selectedAssetId);
-  }, [items, selectedAssetId]);
+    return viewableItems.findIndex((asset) => asset.id === selectedAssetId);
+  }, [selectedAssetId, viewableItems]);
 
   const selectedIndex = useMemo(() => {
-    if (items.length === 0) {
+    if (viewableItems.length === 0) {
       return -1;
     }
     if (paramIndex >= 0) {
       return paramIndex;
     }
     return 0;
-  }, [items.length, paramIndex]);
+  }, [paramIndex, viewableItems.length]);
 
   useEffect(() => {
-    if (items.length === 0) {
+    if (viewableItems.length === 0) {
       return;
     }
     if (selectedAssetId && paramIndex >= 0) {
@@ -162,29 +180,44 @@ export function ViewerShell({
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
-        next.set("asset", items[0].id);
+        next.set("asset", viewableItems[0].id);
         return next;
       },
       { replace: true }
     );
-  }, [items, paramIndex, selectedAssetId, setSearchParams]);
+  }, [paramIndex, selectedAssetId, setSearchParams, viewableItems]);
 
   useEffect(() => {
     setZoomIndex(DEFAULT_ZOOM_INDEX);
   }, [selectedAssetId]);
 
+  useEffect(() => {
+    setIsLivePlaying(false);
+  }, [selectedAssetId]);
+
+  useEffect(() => {
+    const current = selectedIndex >= 0 ? viewableItems[selectedIndex] : null;
+    const isLive = current?.type === "live_photo";
+    const hasPair = !!current?.live_photo_video_id;
+    const liveReady = !!current?.ready?.live;
+    const canPlay = !!liveUrl && isLive && hasPair && liveReady;
+    if (!canPlay) {
+      setIsLivePlaying(false);
+    }
+  }, [liveUrl, selectedIndex, viewableItems]);
+
   const selectIndex = useCallback(
     (nextIndex: number) => {
-      if (nextIndex < 0 || nextIndex >= items.length) {
+      if (nextIndex < 0 || nextIndex >= viewableItems.length) {
         return;
       }
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
-        next.set("asset", items[nextIndex].id);
+        next.set("asset", viewableItems[nextIndex].id);
         return next;
       });
     },
-    [items, setSearchParams]
+    [setSearchParams, viewableItems]
   );
 
   const handlePrev = useCallback(() => {
@@ -195,24 +228,30 @@ export function ViewerShell({
   }, [selectIndex, selectedIndex]);
 
   const handleNext = useCallback(() => {
-    if (selectedIndex < 0 || selectedIndex >= items.length - 1) {
+    if (selectedIndex < 0 || selectedIndex >= viewableItems.length - 1) {
       return;
     }
     selectIndex(selectedIndex + 1);
-  }, [selectIndex, selectedIndex, items.length]);
+  }, [selectIndex, selectedIndex, viewableItems.length]);
 
-  const selectedAsset = selectedIndex >= 0 ? items[selectedIndex] : null;
-  const hasItems = items.length > 0;
+  const selectedAsset = selectedIndex >= 0 ? viewableItems[selectedIndex] : null;
+  const hasItems = viewableItems.length > 0;
   const isLoading = status === "loading";
   const canPrev = selectedIndex > 0;
-  const canNext = selectedIndex >= 0 && selectedIndex < items.length - 1;
+  const canNext = selectedIndex >= 0 && selectedIndex < viewableItems.length - 1;
   const isVideo = selectedAsset?.type === "video";
+  const isLivePhoto = selectedAsset?.type === "live_photo";
   const isZoomable = !!selectedAsset && !isVideo;
   const zoom = ZOOM_LEVELS[zoomIndex] ?? ZOOM_LEVELS[DEFAULT_ZOOM_INDEX];
   const canZoomIn = isZoomable && zoomIndex < ZOOM_LEVELS.length - 1;
   const canZoomOut = isZoomable && zoomIndex > 0;
   const canResetZoom = isZoomable && zoomIndex !== DEFAULT_ZOOM_INDEX;
   const zoomLabel = `${Math.round(zoom * 100)}%`;
+
+  const hasLivePair = !!selectedAsset?.live_photo_video_id;
+  const liveReady = !!selectedAsset?.ready?.live;
+  const showLiveToggle = !!liveUrl && isLivePhoto && hasLivePair;
+  const canPlayLive = showLiveToggle && liveReady;
 
   const typeLabel = selectedAsset ? formatTypeLabel(selectedAsset.type) : "Asset";
   const dateLabel = selectedAsset ? formatDateLabel(selectedAsset) : "Viewer";
@@ -230,6 +269,7 @@ export function ViewerShell({
     : "";
 
   const videoSource = selectedAsset && isVideo ? streamUrl(selectedAsset.id) : "";
+  const liveSource = selectedAsset && showLiveToggle ? liveUrl?.(selectedAsset.id) ?? "" : "";
 
   useEffect(() => {
     if (!selectedAsset || !isVideo) {
@@ -483,6 +523,32 @@ export function ViewerShell({
     };
   }, [isVideo, selectedAsset, videoSource]);
 
+  useEffect(() => {
+    const video = liveVideoRef.current;
+    if (!video) {
+      return;
+    }
+    if (!isLivePlaying) {
+      video.pause();
+      try {
+        video.currentTime = 0;
+      } catch {
+        // Ignore seek errors for unbuffered videos.
+      }
+      return;
+    }
+    try {
+      const playPromise = video.play();
+      if (playPromise && typeof (playPromise as Promise<unknown>).catch === "function") {
+        (playPromise as Promise<unknown>).catch(() => {
+          // ignore autoplay rejection
+        });
+      }
+    } catch {
+      // ignore play errors (jsdom or blocked autoplay)
+    }
+  }, [isLivePlaying, selectedAsset?.id]);
+
   const handleZoomIn = useCallback(() => {
     setZoomIndex((index) => Math.min(index + 1, ZOOM_LEVELS.length - 1));
   }, []);
@@ -494,6 +560,13 @@ export function ViewerShell({
   const handleZoomReset = useCallback(() => {
     setZoomIndex(DEFAULT_ZOOM_INDEX);
   }, []);
+
+  const handleToggleLive = useCallback(() => {
+    if (!canPlayLive) {
+      return;
+    }
+    setIsLivePlaying((prev) => !prev);
+  }, [canPlayLive]);
 
   // (quality is displayed in the in-player selector)
 
@@ -530,6 +603,29 @@ export function ViewerShell({
                   aria-label={videoLabel}
                   data-stream-src={videoSource}
                 />
+              ) : isLivePhoto ? (
+                <div className={`viewer-live-photo${isLivePlaying ? " is-playing" : ""}`}>
+                  <img
+                    className={`viewer-media-item viewer-media-photo viewer-live-still${zoomIndex > 0 ? " is-zoomed" : ""}`}
+                    src={photoSource}
+                    alt={previewAlt}
+                    style={{ transform: `scale(${zoom})` }}
+                  />
+                  {showLiveToggle && liveReady && (
+                    <video
+                      ref={liveVideoRef}
+                      key={`${selectedAsset.id}-live`}
+                      className={`viewer-media-item viewer-live-video${isLivePlaying ? " is-playing" : ""}`}
+                      muted
+                      playsInline
+                      loop
+                      preload="metadata"
+                      src={liveSource}
+                      aria-hidden="true"
+                      style={{ transform: `scale(${zoom})` }}
+                    />
+                  )}
+                </div>
               ) : (
                 <img
                   className={`viewer-media-item viewer-media-photo${zoomIndex > 0 ? " is-zoomed" : ""}`}
@@ -542,7 +638,7 @@ export function ViewerShell({
               {durationLabel && <span className="viewer-duration">{durationLabel}</span>}
             </>
           )}
-          <div className="viewer-hover-nav" aria-hidden="true">
+          <div className="viewer-hover-nav">
             <button
               className="viewer-arrow ghost prev"
               onClick={handlePrev}
@@ -568,7 +664,9 @@ export function ViewerShell({
                 Prev
               </button>
               <div className="viewer-count">
-                {selectedIndex >= 0 ? `${selectedIndex + 1} of ${items.length}` : "No assets loaded"}
+                {selectedIndex >= 0
+                  ? `${selectedIndex + 1} of ${viewableItems.length}`
+                  : "No assets loaded"}
               </div>
               <button className="ghost" onClick={handleNext} disabled={!canNext}>
                 Next
@@ -621,9 +719,25 @@ export function ViewerShell({
         </p>
         <div className="pill-group">
           <span className="pill">{typeLabel}</span>
-          {selectedIndex >= 0 && <span className="pill">{selectedIndex + 1} of {items.length}</span>}
+          {selectedIndex >= 0 && (
+            <span className="pill">{selectedIndex + 1} of {viewableItems.length}</span>
+          )}
           {selectedAsset?.live_photo_video_id && <span className="pill">Live pairing</span>}
         </div>
+
+        {showLiveToggle && (
+          <div className="viewer-live-controls">
+            <button
+              className="ghost"
+              onClick={handleToggleLive}
+              disabled={!canPlayLive}
+              aria-pressed={isLivePlaying}
+            >
+              {isLivePlaying ? "Stop Live" : "Play Live"}
+            </button>
+            {!canPlayLive && <span className="hint">Live video processing</span>}
+          </div>
+        )}
 
         {/* Quality selector is rendered by video.js in the player control bar. */}
         {backLink && (

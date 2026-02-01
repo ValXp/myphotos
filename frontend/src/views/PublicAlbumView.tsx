@@ -45,6 +45,11 @@ type AssetSummary = {
   width: number | null;
   height: number | null;
   live_photo_video_id: string | null;
+  ready?: {
+    thumb?: boolean;
+    stream?: boolean;
+    live?: boolean;
+  };
 };
 
 type AlbumAssetsResponse = {
@@ -516,6 +521,20 @@ export function PublicAlbumView() {
             const typeLabel = formatTypeLabel(asset.type);
             const thumbAlt = `${typeLabel} thumbnail from ${dateLabel}`;
             const downloadUrl = token ? originalDownloadUrl(token, asset.id) : "";
+            const isVideo = asset.type === "video";
+            const canOpenViewer = !isVideo || !!asset.ready?.stream;
+
+            const thumbContent = (
+              <>
+                <img
+                  src={token ? thumbnailUrl(token, asset.id) : undefined}
+                  alt={thumbAlt}
+                  loading="lazy"
+                />
+                <span className="media-badge">{typeLabel}</span>
+                {durationLabel && <span className="media-duration">{durationLabel}</span>}
+              </>
+            );
 
             return (
               <article
@@ -523,19 +542,24 @@ export function PublicAlbumView() {
                 className="media-card album-media-card"
                 style={{ "--delay": `${index * 0.03}s` } as CSSProperties}
               >
-                <Link
-                  className="media-thumb"
-                  to={token ? viewerLink(token, asset.id) : "#"}
-                  aria-label={`Open ${typeLabel} in viewer`}
-                >
-                  <img
-                    src={token ? thumbnailUrl(token, asset.id) : undefined}
-                    alt={thumbAlt}
-                    loading="lazy"
-                  />
-                  <span className="media-badge">{typeLabel}</span>
-                  {durationLabel && <span className="media-duration">{durationLabel}</span>}
-                </Link>
+                {canOpenViewer ? (
+                  <Link
+                    className="media-thumb"
+                    to={token ? viewerLink(token, asset.id) : "#"}
+                    aria-label={`Open ${typeLabel} in viewer`}
+                  >
+                    {thumbContent}
+                  </Link>
+                ) : (
+                  <div
+                    className="media-thumb is-disabled"
+                    role="link"
+                    aria-disabled="true"
+                    aria-label="Video processing"
+                  >
+                    {thumbContent}
+                  </div>
+                )}
                 <div className="media-meta">
                   <h3>{dateLabel}</h3>
                   {metaParts.length > 0 && <p>{metaParts.join(" · ")}</p>}

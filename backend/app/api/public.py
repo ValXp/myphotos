@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.assets import (
+    LIVE_CACHE_CONTROL,
     ORIGINAL_CACHE_CONTROL,
     STREAM_CACHE_CONTROL,
     THUMB_CACHE_CONTROL,
@@ -15,13 +16,14 @@ from app.api.assets import (
     _resolve_original_path,
     _resolve_stream_path,
     _resolve_variant_path,
+    _select_live_video_variant,
     _select_thumbnail_variant,
     _stream_media_type,
 )
 from app.api.deps import get_config, get_db, require_share_link
 from app.config import Config
-from app.db.enums import AssetType
-from app.db.models import AlbumItem, Asset, ShareLink
+from app.db.enums import AssetType, AssetVariantKind
+from app.db.models import AlbumItem, Asset, AssetVariant, ShareLink
 from app.downloads.zip_jobs import (
     ZipFailedError,
     ZipInProgressError,
@@ -63,7 +65,21 @@ def list_public_album_assets(
         .order_by(AlbumItem.order_index.asc(), AlbumItem.asset_id.asc())
         .all()
     )
-    items = [_serialize_asset_summary(asset) for _, asset in rows]
+    assets = [asset for _, asset in rows]
+    asset_ids = [asset.id for asset in assets if asset.id]
+    variants_by_asset: dict[str, list[AssetVariant]] = {}
+    if asset_ids:
+        variant_rows = (
+            db.query(AssetVariant)
+            .filter(AssetVariant.asset_id.in_(asset_ids))
+            .all()
+        )
+        for variant in variant_rows:
+            variants_by_asset.setdefault(variant.asset_id, []).append(variant)
+    items = [
+        _serialize_asset_summary(asset, variants=variants_by_asset.get(asset.id, []))
+        for _, asset in rows
+    ]
     return {"items": items}
 
 
@@ -212,6 +228,40 @@ def get_public_asset_stream_file(
     )
 
 
+@router.get("/{token}/assets/{asset_id}/live")
+def get_public_asset_live_video(
+    asset_id: str,
+    request: Request,
+    share: ShareLink = Depends(require_share_link),
+    db: Session = Depends(get_db),
+    config: Config = Depends(get_config),
+) -> Response:
+    asset = (
+        db.query(Asset)
+        .options(selectinload(Asset.variants))
+        .join(AlbumItem, AlbumItem.asset_id == Asset.id)
+        .filter(AlbumItem.album_id == share.album_id, Asset.id == asset_id)
+        .one_or_none()
+    )
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    if asset.type != AssetType.live_photo:
+        raise HTTPException(status_code=404, detail="live video not found")
+    variant = _select_live_video_variant(asset.variants)
+    if variant is None:
+        raise HTTPException(status_code=404, detail="live video not found")
+    path = _resolve_variant_path(variant.path, config.paths.derived)
+    media_type = _guess_media_type(path, default="video/mp4")
+    return _build_file_response(
+        path,
+        request,
+        media_type=media_type,
+        cache_control=LIVE_CACHE_CONTROL,
+        enable_range=True,
+        missing_detail="live video not found",
+    )
+
+
 @router.get("/{token}/assets/{asset_id}/original")
 def get_public_asset_original(
     asset_id: str,
@@ -263,7 +313,27 @@ def download_public_album_zip(
     )
 
 
-def _serialize_asset_summary(asset: Asset) -> dict[str, object]:
+def _serialize_asset_summary(
+    asset: Asset,
+    *,
+    variants: list[AssetVariant] | None = None,
+) -> dict[str, object]:
+    variants = variants or []
+
+    def has_variant(kind: AssetVariantKind, profile: str | None = None) -> bool:
+        for variant in variants:
+            if variant.kind != kind:
+                continue
+            if profile is None or variant.profile == profile:
+                return True
+        return False
+
+    ready = {
+        "thumb": has_variant(AssetVariantKind.thumb, "thumb_md"),
+        "stream": has_variant(AssetVariantKind.video_transcode),
+        "live": has_variant(AssetVariantKind.live_video),
+    }
+
     return {
         "id": asset.id,
         "type": asset.type,
@@ -273,6 +343,7 @@ def _serialize_asset_summary(asset: Asset) -> dict[str, object]:
         "width": asset.width,
         "height": asset.height,
         "live_photo_video_id": asset.live_photo_video_id,
+        "ready": ready,
     }
 
 

@@ -60,6 +60,12 @@ function publicStreamUrl(token: string, assetId: string): string {
   return buildApiUrl(`/public/shares/${safeToken}/assets/${safeId}/stream/master.m3u8`);
 }
 
+function publicLiveUrl(token: string, assetId: string): string {
+  const safeToken = encodeURIComponent(token);
+  const safeId = encodeURIComponent(assetId);
+  return buildApiUrl(`/public/shares/${safeToken}/assets/${safeId}/live`);
+}
+
 export function PublicViewerView() {
   const { token } = useParams();
   const [items, setItems] = useState<ViewerAsset[]>([]);
@@ -103,6 +109,11 @@ export function PublicViewerView() {
     [token]
   );
 
+  const liveBuilder = useCallback(
+    (assetId: string) => (token ? publicLiveUrl(token, assetId) : ""),
+    [token]
+  );
+
   const backLink = token
     ? { to: `/share/${encodeURIComponent(token)}`, label: "Back to album" }
     : undefined;
@@ -118,6 +129,7 @@ export function PublicViewerView() {
       error={error}
       previewUrl={thumbBuilder}
       streamUrl={streamBuilder}
+      liveUrl={liveBuilder}
       backLink={backLink}
     />
   );

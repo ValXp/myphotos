@@ -11,7 +11,8 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_config, get_db, require_owner_session
 from app.auth.sessions import Session as OwnerSession
 from app.config import Config
-from app.db.models import Album, AlbumItem, Asset, ShareLink
+from app.db.enums import AssetVariantKind
+from app.db.models import Album, AlbumItem, Asset, AssetVariant, ShareLink
 from app.downloads.zip_jobs import (
     ZipFailedError,
     ZipInProgressError,
@@ -82,7 +83,21 @@ def list_album_assets(
         .order_by(AlbumItem.order_index.asc(), AlbumItem.asset_id.asc())
         .all()
     )
-    items = [_serialize_asset_summary(asset) for _, asset in rows]
+    assets = [asset for _, asset in rows]
+    asset_ids = [asset.id for asset in assets if asset.id]
+    variants_by_asset: dict[str, list[AssetVariant]] = {}
+    if asset_ids:
+        variant_rows = (
+            db.query(AssetVariant)
+            .filter(AssetVariant.asset_id.in_(asset_ids))
+            .all()
+        )
+        for variant in variant_rows:
+            variants_by_asset.setdefault(variant.asset_id, []).append(variant)
+    items = [
+        _serialize_asset_summary(asset, variants=variants_by_asset.get(asset.id, []))
+        for _, asset in rows
+    ]
     return {"items": items}
 
 
@@ -350,7 +365,27 @@ def _serialize_share_link(share: ShareLink) -> dict[str, object]:
     }
 
 
-def _serialize_asset_summary(asset: Asset) -> dict[str, object]:
+def _serialize_asset_summary(
+    asset: Asset,
+    *,
+    variants: list[AssetVariant] | None = None,
+) -> dict[str, object]:
+    variants = variants or []
+
+    def has_variant(kind: AssetVariantKind, profile: str | None = None) -> bool:
+        for variant in variants:
+            if variant.kind != kind:
+                continue
+            if profile is None or variant.profile == profile:
+                return True
+        return False
+
+    ready = {
+        "thumb": has_variant(AssetVariantKind.thumb, "thumb_md"),
+        "stream": has_variant(AssetVariantKind.video_transcode),
+        "live": has_variant(AssetVariantKind.live_video),
+    }
+
     return {
         "id": asset.id,
         "type": asset.type,
@@ -360,6 +395,7 @@ def _serialize_asset_summary(asset: Asset) -> dict[str, object]:
         "width": asset.width,
         "height": asset.height,
         "live_photo_video_id": asset.live_photo_video_id,
+        "ready": ready,
     }
 
 

@@ -50,6 +50,11 @@ type AssetSummary = {
   width: number | null;
   height: number | null;
   live_photo_video_id: string | null;
+  ready?: {
+    thumb?: boolean;
+    stream?: boolean;
+    live?: boolean;
+  };
 };
 
 type AlbumAssetsResponse = {
@@ -553,6 +558,7 @@ export function AlbumDetailView() {
               previewUrl={thumbnailUrl}
               photoUrl={viewerPhotoUrl}
               streamUrl={streamUrl}
+              liveUrl={liveVideoUrl}
               showFooterNav={false}
             />
           </div>
@@ -696,7 +702,13 @@ export function AlbumDetailView() {
             const thumbAlt = `${typeLabel} thumbnail from ${dateLabel}`;
             const isSelected = selectedIds.has(asset.id);
             const isLivePhoto = asset.type === "live_photo" && !!asset.live_photo_video_id;
-            const livePreviewSrc = isLivePhoto ? liveVideoUrl(asset.id) : null;
+            const hasLivePreview = isLivePhoto && !!asset.ready?.live;
+            const livePreviewSrc = hasLivePreview ? liveVideoUrl(asset.id) : null;
+            const isVideo = asset.type === "video";
+            const canOpenViewer = !isVideo || !!asset.ready?.stream;
+            const viewerLabel = canOpenViewer
+              ? `Open ${typeLabel.toLowerCase()} viewer`
+              : "Video processing";
 
             return (
               <article
@@ -705,19 +717,24 @@ export function AlbumDetailView() {
                 style={{ "--delay": `${index * 0.03}s` } as CSSProperties}
               >
                 <div
-                  className={`media-thumb${isLivePhoto ? " live-photo-thumb" : ""}`}
+                  className={`media-thumb${hasLivePreview ? " live-photo-thumb" : ""}${!canOpenViewer ? " is-disabled" : ""}`}
                   role="button"
-                  tabIndex={0}
-                  onClick={() => openViewer(asset.id)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      openViewer(asset.id);
-                    }
-                  }}
-                  onMouseEnter={isLivePhoto ? () => handleMouseEnter(asset.id) : undefined}
-                  onMouseLeave={isLivePhoto ? () => handleMouseLeave(asset.id) : undefined}
-                  aria-label={`Open ${typeLabel.toLowerCase()} viewer`}
+                  tabIndex={canOpenViewer ? 0 : -1}
+                  aria-disabled={!canOpenViewer}
+                  onClick={canOpenViewer ? () => openViewer(asset.id) : undefined}
+                  onKeyDown={
+                    canOpenViewer
+                      ? (event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            openViewer(asset.id);
+                          }
+                        }
+                      : undefined
+                  }
+                  onMouseEnter={hasLivePreview ? () => handleMouseEnter(asset.id) : undefined}
+                  onMouseLeave={hasLivePreview ? () => handleMouseLeave(asset.id) : undefined}
+                  aria-label={viewerLabel}
                 >
                   <label className="media-select" onClick={(event) => event.stopPropagation()}>
                     <input
@@ -728,12 +745,12 @@ export function AlbumDetailView() {
                     />
                   </label>
                   <img
-                    className={isLivePhoto ? "live-photo-still" : undefined}
+                    className={hasLivePreview ? "live-photo-still" : undefined}
                     src={thumbnailUrl(asset.id)}
                     alt={thumbAlt}
                     loading="lazy"
                   />
-                  {isLivePhoto && (
+                  {hasLivePreview && (
                     <video
                       ref={registerVideoRef(asset.id)}
                       className="live-photo-video"
