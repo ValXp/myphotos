@@ -272,6 +272,12 @@ export function ViewerShell({
       playsinline: true,
       fluid: true,
       autoplay: true,
+      // Ensure auth cookies are sent for HLS segment/playlist requests.
+      html5: {
+        vhs: {
+          withCredentials: true
+        }
+      },
       sources: [{ src: source, type }]
     });
 
