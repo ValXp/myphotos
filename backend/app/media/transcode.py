@@ -232,10 +232,15 @@ def _transcode_profile(
         scale_filter = (
             f"scale=w={profile.width}:h={profile.height}:force_original_aspect_ratio=decrease"
         )
+        # iPhone HDR (HLG/PQ) needs explicit input colorspace hints, otherwise
+        # ffmpeg can treat it like SDR and the result looks blown out.
+        transfer_in = source_color.transfer or "smpte2084"
         vf = (
             f"{scale_filter},"
-            "zscale=t=linear:npl=100,"
-            "tonemap=mobius:desat=0,"
+            "zscale=primariesin=bt2020:matrixin=bt2020nc:transferin="
+            + transfer_in
+            + ":t=linear:npl=100,"
+            "tonemap=bt2390:desat=0,"
             "zscale=primaries=bt709:transfer=bt709:matrix=bt709:range=tv,"
             "format=yuv420p"
         )
