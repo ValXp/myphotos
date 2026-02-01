@@ -240,7 +240,7 @@ def _transcode_profile(
             "zscale=primariesin=bt2020:matrixin=bt2020nc:transferin="
             + transfer_in
             + ":t=linear:npl=100,"
-            "tonemap=bt2390:desat=0,"
+            "tonemap=hable:desat=0,"
             "zscale=primaries=bt709:transfer=bt709:matrix=bt709:range=tv,"
             "format=yuv420p"
         )
