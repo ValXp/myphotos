@@ -38,6 +38,19 @@ class TranscodeNotFoundError(TranscodeError):
 TranscodeFunc = Callable[[Path, Path, Path, VariantProfile], None]
 
 
+def _profile_uses_qsv(profile: VariantProfile, *, source_color: SourceColorInfo, use_qsv_for_4k: bool) -> bool:
+    """Best-effort: returns True if _transcode_profile will use a QSV encoder.
+
+    We only use QSV for 4K renditions when enabled.
+    """
+    if not use_qsv_for_4k:
+        return False
+    if profile.width != 3840 or profile.height != 2160:
+        return False
+    # HDR 4K uses hevc_qsv; SDR 4K uses h264_qsv.
+    return True
+
+
 @dataclass(frozen=True)
 class SourceColorInfo:
     is_hdr: bool
@@ -154,21 +167,77 @@ def run_transcode_job(
         )
     )
 
+    # Parallelize within a single asset: run at most one QSV-enabled 4K rendition
+    # while CPU-heavy SDR ladder runs sequentially.
+    #
+    # This is designed to overlap iGPU work (QSV) with CPU tone-mapping work.
+    qsv_profile: VariantProfile | None = None
+    for p in profiles:
+        if _profile_uses_qsv(p, source_color=source_color, use_qsv_for_4k=use_qsv_for_4k) and getattr(
+            p, "hdr", False
+        ):
+            qsv_profile = p
+            break
+
+    qsv_proc: subprocess.Popen[str] | None = None
+    qsv_paths: tuple[Path, Path] | None = None
+
     variants: list[AssetVariant] = []
-    for profile in profiles:
-        playlist_path = transcode_playlist_path(derived_root, asset.id, profile)
-        segment_pattern = transcode_segment_pattern(derived_root, asset.id, profile)
-        playlist_path.parent.mkdir(parents=True, exist_ok=True)
-        transcoder(source_path, playlist_path, segment_pattern, profile)
-        if not playlist_path.exists():
-            raise TranscodeError(f"transcode output missing: {playlist_path}")
-        record = build_variant_record(
-            derived_root,
-            asset.id,
-            profile,
-            size_bytes=playlist_path.stat().st_size,
-        )
-        variants.append(_upsert_variant(session, record))
+    try:
+        if qsv_profile is not None and transcode_func is None:
+            playlist_path = transcode_playlist_path(derived_root, asset.id, qsv_profile)
+            segment_pattern = transcode_segment_pattern(derived_root, asset.id, qsv_profile)
+            args = _ffmpeg_args_for_profile(
+                source_path,
+                playlist_path,
+                segment_pattern,
+                qsv_profile,
+                source_color=source_color,
+                use_qsv_for_4k=use_qsv_for_4k,
+                ffmpeg_path=ffmpeg_path,
+            )
+            qsv_paths = (playlist_path, segment_pattern)
+            qsv_proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+        for profile in profiles:
+            if qsv_profile is not None and profile.name == qsv_profile.name:
+                continue
+            playlist_path = transcode_playlist_path(derived_root, asset.id, profile)
+            segment_pattern = transcode_segment_pattern(derived_root, asset.id, profile)
+            playlist_path.parent.mkdir(parents=True, exist_ok=True)
+            transcoder(source_path, playlist_path, segment_pattern, profile)
+            if not playlist_path.exists():
+                raise TranscodeError(f"transcode output missing: {playlist_path}")
+            record = build_variant_record(
+                derived_root,
+                asset.id,
+                profile,
+                size_bytes=playlist_path.stat().st_size,
+            )
+            variants.append(_upsert_variant(session, record))
+
+        if qsv_proc is not None and qsv_profile is not None and qsv_paths is not None:
+            stdout, stderr = qsv_proc.communicate()
+            if qsv_proc.returncode != 0:
+                raise subprocess.CalledProcessError(
+                    qsv_proc.returncode,
+                    qsv_proc.args,
+                    output=stdout,
+                    stderr=stderr,
+                )
+            qsv_playlist_path, _ = qsv_paths
+            if not qsv_playlist_path.exists():
+                raise TranscodeError(f"transcode output missing: {qsv_playlist_path}")
+            record = build_variant_record(
+                derived_root,
+                asset.id,
+                qsv_profile,
+                size_bytes=qsv_playlist_path.stat().st_size,
+            )
+            variants.append(_upsert_variant(session, record))
+    finally:
+        if qsv_proc is not None and qsv_proc.poll() is None:
+            qsv_proc.terminate()
 
     manifest_path = master_manifest_path(derived_root, asset.id)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
@@ -207,7 +276,7 @@ def _profile_bandwidth(profile: VariantProfile) -> int:
     return (video_kbps + audio_kbps) * 1000
 
 
-def _transcode_profile(
+def _ffmpeg_args_for_profile(
     source_path: Path,
     playlist_path: Path,
     segment_pattern: Path,
@@ -217,7 +286,7 @@ def _transcode_profile(
     use_qsv_for_4k: bool,
     ffmpeg_path: str,
     hls_time_seconds: int = DEFAULT_HLS_TIME_SECONDS,
-) -> None:
+) -> list[str]:
     if not source_path.exists():
         raise TranscodeError(f"file not found: {source_path}")
     if shutil.which(ffmpeg_path) is None:
@@ -332,7 +401,7 @@ def _transcode_profile(
                 "yuv420p",
             ]
 
-    args: list[str] = [
+    return [
         ffmpeg_path,
         "-hide_banner",
         "-loglevel",
@@ -374,13 +443,30 @@ def _transcode_profile(
         str(playlist_path),
     ]
 
-    subprocess.run(
-        args,
-        check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
+
+def _transcode_profile(
+    source_path: Path,
+    playlist_path: Path,
+    segment_pattern: Path,
+    profile: VariantProfile,
+    *,
+    source_color: SourceColorInfo,
+    use_qsv_for_4k: bool,
+    ffmpeg_path: str,
+    hls_time_seconds: int = DEFAULT_HLS_TIME_SECONDS,
+) -> None:
+    args = _ffmpeg_args_for_profile(
+        source_path,
+        playlist_path,
+        segment_pattern,
+        profile,
+        source_color=source_color,
+        use_qsv_for_4k=use_qsv_for_4k,
+        ffmpeg_path=ffmpeg_path,
+        hls_time_seconds=hls_time_seconds,
     )
+
+    subprocess.run(args, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
 
 def _probe_source_color(source_path: Path, *, ffprobe_path: str = "ffprobe") -> SourceColorInfo:
