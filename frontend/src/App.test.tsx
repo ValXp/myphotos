@@ -315,7 +315,7 @@ describe("App flows", () => {
       "poster",
       expect.stringContaining("/assets/asset-owner-video/thumb")
     );
-    expect(videoContainer.querySelector(".viewer-duration")).toHaveTextContent("1:04");
+    expect(videoContainer.querySelector(".viewer-duration")).not.toBeInTheDocument();
   });
 
   it("uses video metadata when duration is missing", async () => {
@@ -394,7 +394,7 @@ describe("App flows", () => {
     fireEvent(video, new Event("loadedmetadata"));
 
     await waitFor(() => {
-      expect(container.querySelector(".viewer-duration")).toHaveTextContent("0:02");
+      expect(container.querySelector(".viewer-duration")).not.toBeInTheDocument();
     });
   });
 

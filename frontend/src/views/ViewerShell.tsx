@@ -786,7 +786,6 @@ export function ViewerShell({
             )}
             <div className="viewer-topbar-meta">
               <span className="viewer-topbar-title">{dateLabel}</span>
-              {selectedAsset && <span className="viewer-topbar-subtitle">{typeLabel}</span>}
             </div>
           </div>
           {showFooterNav && (
@@ -909,8 +908,7 @@ export function ViewerShell({
                   style={{ transform: `scale(${zoom})` }}
                 />
               )}
-              <span className="viewer-badge">{typeLabel}</span>
-              {durationLabel && <span className="viewer-duration">{durationLabel}</span>}
+              {/* type/duration pills intentionally not shown in viewer */}
             </>
           )}
           <div className="viewer-hover-nav">
