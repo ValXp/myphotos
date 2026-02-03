@@ -305,6 +305,49 @@ export function ViewerShell({
     selectIndex(selectedIndex + 1);
   }, [selectIndex, selectedIndex, viewableItems.length]);
 
+  useEffect(() => {
+    const shouldIgnoreTarget = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement)) {
+        return false;
+      }
+      const tag = target.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+        return true;
+      }
+      if (target.isContentEditable) {
+        return true;
+      }
+      return false;
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Arrow keys should navigate the viewer (bypass the video player),
+      // but do not steal keys while typing in inputs.
+      if (event.defaultPrevented) {
+        return;
+      }
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+        return;
+      }
+      if (shouldIgnoreTarget(event.target)) {
+        return;
+      }
+
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        event.stopPropagation();
+        handlePrev();
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        event.stopPropagation();
+        handleNext();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", handleKeyDown, { capture: true } as any);
+  }, [handleNext, handlePrev]);
+
   const selectedAsset = selectedIndex >= 0 ? viewableItems[selectedIndex] : null;
   const hasItems = viewableItems.length > 0;
   const isLoading = status === "loading";
