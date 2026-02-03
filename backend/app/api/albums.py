@@ -5,7 +5,7 @@ import secrets
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Response
 from fastapi.responses import FileResponse
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_config, get_db, require_owner_session
@@ -80,6 +80,11 @@ def list_album_assets(
         .join(Asset, AlbumItem.asset_id == Asset.id)
         .filter(AlbumItem.album_id == album_id)
         .filter(Asset.gone.is_(False))
+        .filter(
+            ~Asset.id.in_(
+                select(Asset.live_photo_video_id).where(Asset.live_photo_video_id.isnot(None))
+            )
+        )
         .order_by(AlbumItem.order_index.asc(), AlbumItem.asset_id.asc())
         .all()
     )
@@ -457,6 +462,11 @@ def _album_item_count(db: Session, album_id: str) -> int:
         .join(Asset, AlbumItem.asset_id == Asset.id)
         .filter(AlbumItem.album_id == album_id)
         .filter(Asset.gone.is_(False))
+        .filter(
+            ~Asset.id.in_(
+                select(Asset.live_photo_video_id).where(Asset.live_photo_video_id.isnot(None))
+            )
+        )
         .scalar()
     )
     return int(count or 0)

@@ -318,6 +318,86 @@ describe("App flows", () => {
     expect(videoContainer.querySelector(".viewer-duration")).toHaveTextContent("1:04");
   });
 
+  it("uses video metadata when duration is missing", async () => {
+    mockedSessionStatus.mockResolvedValue(true);
+
+    const assetsPayload = {
+      items: [
+        {
+          id: "asset-duration-missing",
+          type: "video",
+          captured_at: "2026-01-27T12:00:00Z",
+          created_at: "2026-01-27T12:00:00Z",
+          duration_ms: null,
+          width: 1920,
+          height: 1080,
+          live_photo_video_id: null,
+          ready: { stream: true }
+        }
+      ],
+      next_cursor: null
+    };
+
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.includes("/admin/index/overview")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => ({
+            scan: { status: "idle", job_id: null },
+            assets: { count: 0 },
+            jobs: { metadata: {}, thumb: {}, transcode: {} },
+            active_jobs: 0
+          })
+        });
+      }
+      if (url.includes("/assets?")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => assetsPayload
+        });
+      }
+      if (url.includes("/albums")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => ({ items: [] })
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({})
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { container } = render(
+      <MemoryRouter initialEntries={["/app/timeline?viewer=1&asset=asset-duration-missing"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    const video = (await screen.findByLabelText(
+      /video playback from jan 27, 2026/i
+    )) as HTMLVideoElement;
+
+    expect(container.querySelector(".viewer-duration")).not.toBeInTheDocument();
+
+    Object.defineProperty(video, "duration", { value: 2, configurable: true });
+    fireEvent(video, new Event("loadedmetadata"));
+
+    await waitFor(() => {
+      expect(container.querySelector(".viewer-duration")).toHaveTextContent("0:02");
+    });
+  });
+
   it("toggles live photo playback in the viewer", async () => {
     mockedSessionStatus.mockResolvedValue(true);
 

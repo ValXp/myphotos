@@ -546,25 +546,28 @@ export function AlbumDetailView() {
       </header>
 
       {viewerOpen && (
-        <div className="viewer-overlay" onClick={closeViewer} role="dialog" aria-modal="true">
-          <div className="viewer-overlay-panel" onClick={(event) => event.stopPropagation()}>
-            <button className="viewer-overlay-close ghost" onClick={closeViewer}>
-              Close
-            </button>
-            <ViewerShell
-              contextLabel="Owner album"
-              emptyMessage="No assets loaded."
-              emptySubhead="Pick an asset from the album."
-              items={items}
-              status={status === "loading" ? "loading" : status === "ready" ? "ready" : status === "error" ? "error" : "idle"}
-              error={error}
-              previewUrl={thumbnailUrl}
-              photoUrl={viewerPhotoUrl}
-              streamUrl={streamUrl}
-              liveUrl={liveVideoUrl}
-              showFooterNav={false}
-            />
-          </div>
+        <div className="viewer-overlay" role="dialog" aria-modal="true">
+          <ViewerShell
+            contextLabel="Owner album"
+            emptyMessage="No assets loaded."
+            emptySubhead="Pick an asset from the album."
+            items={items}
+            status={
+              status === "loading"
+                ? "loading"
+                : status === "ready"
+                  ? "ready"
+                  : status === "error"
+                    ? "error"
+                    : "idle"
+            }
+            error={error}
+            previewUrl={thumbnailUrl}
+            photoUrl={viewerPhotoUrl}
+            streamUrl={streamUrl}
+            liveUrl={liveVideoUrl}
+            onClose={closeViewer}
+          />
         </div>
       )}
 

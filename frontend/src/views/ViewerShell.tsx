@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FocusEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import videojs from "video.js";
 import "video.js/dist/video-js.css";
 
 const ZOOM_LEVELS = [1, 1.5, 2, 3];
 const DEFAULT_ZOOM_INDEX = 0;
+const CONTROLS_HIDE_DELAY_MS = 10_000;
 
 let qualityLevelsPromise: Promise<void> | null = null;
 
@@ -67,6 +68,7 @@ type ViewerShellProps = {
     to: string;
     label: string;
   };
+  onClose?: () => void;
   showFooterNav?: boolean;
 };
 
@@ -137,6 +139,7 @@ export function ViewerShell({
   streamUrl,
   liveUrl,
   backLink,
+  onClose,
   showFooterNav = true
 }: ViewerShellProps) {
   const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
@@ -145,9 +148,25 @@ export function ViewerShell({
   const videoContainerRef = useRef<HTMLDivElement | null>(null);
   const playerRef = useRef<ReturnType<typeof videojs> | null>(null);
   const liveVideoRef = useRef<HTMLVideoElement | null>(null);
+  const topbarRef = useRef<HTMLDivElement | null>(null);
+  const hideTimerRef = useRef<number | null>(null);
+  const lastInteractionRef = useRef<"keyboard" | "pointer" | null>(null);
   const [isLivePlaying, setIsLivePlaying] = useState(false);
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const [controlsPinned, setControlsPinned] = useState(false);
+  const [durationOverrides, setDurationOverrides] = useState<Record<string, number>>({});
 
-  const viewableItems = useMemo(() => items.filter(isViewableAsset), [items]);
+  const viewableItems = useMemo(() => {
+    const companionIds = new Set<string>();
+    for (const asset of items) {
+      if (asset.live_photo_video_id) {
+        companionIds.add(asset.live_photo_video_id);
+      }
+    }
+    return items.filter(
+      (asset) => !companionIds.has(asset.id) && isViewableAsset(asset)
+    );
+  }, [items]);
 
   const paramIndex = useMemo(() => {
     if (!selectedAssetId) {
@@ -190,6 +209,62 @@ export function ViewerShell({
   useEffect(() => {
     setIsLivePlaying(false);
   }, [selectedAssetId]);
+
+  const clearHideTimer = useCallback(() => {
+    if (hideTimerRef.current !== null) {
+      window.clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleHide = useCallback(() => {
+    clearHideTimer();
+    if (controlsPinned) {
+      return;
+    }
+    hideTimerRef.current = window.setTimeout(() => {
+      setControlsVisible(false);
+    }, CONTROLS_HIDE_DELAY_MS);
+  }, [clearHideTimer, controlsPinned]);
+
+  const showControls = useCallback(() => {
+    setControlsVisible(true);
+    scheduleHide();
+  }, [scheduleHide]);
+
+  useEffect(() => {
+    setControlsVisible(true);
+    scheduleHide();
+    return clearHideTimer;
+  }, [clearHideTimer, scheduleHide, selectedAssetId]);
+
+  useEffect(() => {
+    if (controlsPinned) {
+      setControlsVisible(true);
+      clearHideTimer();
+      return;
+    }
+    scheduleHide();
+  }, [clearHideTimer, controlsPinned, scheduleHide]);
+
+  useEffect(() => {
+    const handlePointer = () => {
+      lastInteractionRef.current = "pointer";
+      showControls();
+    };
+    const handleKey = () => {
+      lastInteractionRef.current = "keyboard";
+      showControls();
+    };
+    window.addEventListener("mousemove", handlePointer);
+    window.addEventListener("keydown", handleKey);
+    window.addEventListener("touchstart", handlePointer, { passive: true });
+    return () => {
+      window.removeEventListener("mousemove", handlePointer);
+      window.removeEventListener("keydown", handleKey);
+      window.removeEventListener("touchstart", handlePointer);
+    };
+  }, [showControls]);
 
   useEffect(() => {
     const current = selectedIndex >= 0 ? viewableItems[selectedIndex] : null;
@@ -251,9 +326,10 @@ export function ViewerShell({
 
   const typeLabel = selectedAsset ? formatTypeLabel(selectedAsset.type) : "Asset";
   const dateLabel = selectedAsset ? formatDateLabel(selectedAsset) : "Viewer";
-  const durationLabel = selectedAsset
-    ? formatDuration(selectedAsset.duration_ms, selectedAsset.type)
+  const resolvedDurationMs = selectedAsset
+    ? durationOverrides[selectedAsset.id] ?? selectedAsset.duration_ms
     : null;
+  const durationLabel = selectedAsset ? formatDuration(resolvedDurationMs, selectedAsset.type) : null;
   const previewAlt = selectedAsset ? `${typeLabel} preview from ${dateLabel}` : "Viewer preview";
   const videoLabel = selectedAsset ? `${typeLabel} playback from ${dateLabel}` : "Video playback";
   const photoSource = selectedAsset
@@ -279,6 +355,7 @@ export function ViewerShell({
 
     container.innerHTML = "";
 
+    const assetId = selectedAsset.id;
     const videoEl = document.createElement("video");
     videoEl.className = "viewer-media-item video-js vjs-default-skin";
     videoEl.setAttribute("controls", "true");
@@ -291,9 +368,33 @@ export function ViewerShell({
     }
     container.appendChild(videoEl);
 
+    const shouldCaptureDuration = !selectedAsset.duration_ms || selectedAsset.duration_ms <= 0;
+    const handleDurationUpdate = () => {
+      const durationSeconds = videoEl.duration;
+      if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+        return;
+      }
+      const durationMs = Math.round(durationSeconds * 1000);
+      setDurationOverrides((prev) => {
+        if (prev[assetId] === durationMs) {
+          return prev;
+        }
+        return { ...prev, [assetId]: durationMs };
+      });
+    };
+
+    if (shouldCaptureDuration) {
+      videoEl.addEventListener("loadedmetadata", handleDurationUpdate);
+      videoEl.addEventListener("durationchange", handleDurationUpdate);
+    }
+
     // Avoid initializing video.js in unit tests (jsdom doesn't fully support media APIs).
     if (import.meta.env.MODE === "test") {
       return () => {
+        if (shouldCaptureDuration) {
+          videoEl.removeEventListener("loadedmetadata", handleDurationUpdate);
+          videoEl.removeEventListener("durationchange", handleDurationUpdate);
+        }
         container.innerHTML = "";
       };
     }
@@ -536,6 +637,10 @@ export function ViewerShell({
 
     return () => {
       cancelled = true;
+      if (shouldCaptureDuration) {
+        videoEl.removeEventListener("loadedmetadata", handleDurationUpdate);
+        videoEl.removeEventListener("durationchange", handleDurationUpdate);
+      }
       if (player) {
         try {
           player.dispose();
@@ -595,21 +700,124 @@ export function ViewerShell({
     setIsLivePlaying((prev) => !prev);
   }, [canPlayLive]);
 
+  const handleTopbarFocus = useCallback(() => {
+    if (lastInteractionRef.current === "keyboard") {
+      setControlsPinned(true);
+    }
+    setControlsVisible(true);
+  }, []);
+
+  const handleTopbarBlur = useCallback(
+    (event: FocusEvent<HTMLDivElement>) => {
+      const nextTarget = event.relatedTarget as Node | null;
+      if (topbarRef.current && nextTarget && topbarRef.current.contains(nextTarget)) {
+        return;
+      }
+      setControlsPinned(false);
+    },
+    []
+  );
+
   // (quality is displayed in the in-player selector)
 
   return (
     <section className="page viewer" aria-label={contextLabel}>
       <div className="viewer-stage">
-        {error && (
-          <div className="status error" role="alert">
-            {error}
+        <div
+          ref={topbarRef}
+          className={`viewer-topbar${controlsVisible ? " is-visible" : " is-hidden"}`}
+          onMouseMove={showControls}
+          onFocusCapture={handleTopbarFocus}
+          onBlurCapture={handleTopbarBlur}
+        >
+          <div className="viewer-topbar-left">
+            {onClose && (
+              <button className="ghost viewer-topbar-button" onClick={onClose}>
+                Close
+              </button>
+            )}
+            {backLink && (
+              <Link className="ghost viewer-topbar-button" to={backLink.to}>
+                {backLink.label}
+              </Link>
+            )}
+            <div className="viewer-topbar-meta">
+              <span className="viewer-topbar-title">{dateLabel}</span>
+              {selectedAsset && <span className="viewer-topbar-subtitle">{typeLabel}</span>}
+            </div>
           </div>
-        )}
+          {showFooterNav && (
+            <div className="viewer-topbar-center">
+              <span className="viewer-count">
+                {selectedIndex >= 0
+                  ? `${selectedIndex + 1} of ${viewableItems.length}`
+                  : "No assets loaded"}
+              </span>
+            </div>
+          )}
+          {showFooterNav && (
+            <div className="viewer-topbar-right">
+              {showLiveToggle && (
+                <>
+                  <button
+                    className="ghost viewer-topbar-button"
+                    onClick={handleToggleLive}
+                    disabled={!canPlayLive}
+                    aria-pressed={isLivePlaying}
+                  >
+                    {isLivePlaying ? "Stop Live" : "Play Live"}
+                  </button>
+                  {!canPlayLive && <span className="hint viewer-live-hint">Live video processing</span>}
+                </>
+              )}
+              <div className="viewer-nav">
+                <button className="ghost" onClick={handlePrev} disabled={!canPrev}>
+                  Prev
+                </button>
+                <button className="ghost" onClick={handleNext} disabled={!canNext}>
+                  Next
+                </button>
+              </div>
+              <div className="viewer-zoom">
+                <span className="viewer-zoom-label">Zoom</span>
+                <div className="viewer-zoom-buttons">
+                  <button
+                    className="ghost viewer-zoom-btn"
+                    onClick={handleZoomOut}
+                    disabled={!canZoomOut}
+                    aria-label="Zoom out"
+                  >
+                    -
+                  </button>
+                  <span className="viewer-zoom-value" aria-live="polite">
+                    {zoomLabel}
+                  </span>
+                  <button
+                    className="ghost viewer-zoom-btn"
+                    onClick={handleZoomIn}
+                    disabled={!canZoomIn}
+                    aria-label="Zoom in"
+                  >
+                    +
+                  </button>
+                  <button
+                    className="ghost viewer-zoom-btn"
+                    onClick={handleZoomReset}
+                    disabled={!canResetZoom}
+                    aria-label="Reset zoom"
+                  >
+                    Fit
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
         <div className={`viewer-media${isVideo ? " is-video" : ""}`}>
-          {backLink && (
-            <Link className="viewer-back ghost" to={backLink.to}>
-              {backLink.label}
-            </Link>
+          {error && (
+            <div className="status error viewer-status" role="alert">
+              {error}
+            </div>
           )}
           {isLoading && !hasItems && (
             <div className="viewer-placeholder" role="status">
@@ -679,70 +887,8 @@ export function ViewerShell({
             </button>
           </div>
         </div>
-        {showLiveToggle && (
-          <div className="viewer-live-controls">
-            <button
-              className="ghost"
-              onClick={handleToggleLive}
-              disabled={!canPlayLive}
-              aria-pressed={isLivePlaying}
-            >
-              {isLivePlaying ? "Stop Live" : "Play Live"}
-            </button>
-            {!canPlayLive && <span className="hint">Live video processing</span>}
-          </div>
-        )}
-        {showFooterNav && (
-          <div className="viewer-controls">
-            <div className="viewer-nav">
-              <button className="ghost" onClick={handlePrev} disabled={!canPrev}>
-                Prev
-              </button>
-              <div className="viewer-count">
-                {selectedIndex >= 0
-                  ? `${selectedIndex + 1} of ${viewableItems.length}`
-                  : "No assets loaded"}
-              </div>
-              <button className="ghost" onClick={handleNext} disabled={!canNext}>
-                Next
-              </button>
-            </div>
-            <div className="viewer-zoom">
-              <span className="viewer-zoom-label">Zoom</span>
-              <div className="viewer-zoom-buttons">
-                <button
-                  className="ghost viewer-zoom-btn"
-                  onClick={handleZoomOut}
-                  disabled={!canZoomOut}
-                  aria-label="Zoom out"
-                >
-                  -
-                </button>
-                <span className="viewer-zoom-value" aria-live="polite">
-                  {zoomLabel}
-                </span>
-                <button
-                  className="ghost viewer-zoom-btn"
-                  onClick={handleZoomIn}
-                  disabled={!canZoomIn}
-                  aria-label="Zoom in"
-                >
-                  +
-                </button>
-                <button
-                  className="ghost viewer-zoom-btn"
-                  onClick={handleZoomReset}
-                  disabled={!canResetZoom}
-                  aria-label="Reset zoom"
-                >
-                  Fit
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
         {nextCursor && hasItems && (
-          <p className="hint">More assets are available in the timeline.</p>
+          <p className="hint viewer-next-hint">More assets are available in the timeline.</p>
         )}
       </div>
     </section>

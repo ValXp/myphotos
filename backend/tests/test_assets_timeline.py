@@ -192,6 +192,36 @@ class TimelinePaginationTest(unittest.TestCase):
         items = body["items"]
         self.assertEqual([item["id"] for item in items], [assets[0].id, assets[3].id])
 
+    def test_live_photo_companion_videos_are_hidden(self) -> None:
+        base = datetime(2024, 4, 2, tzinfo=timezone.utc)
+        video = Asset(
+            id="00000000-0000-0000-0000-000000009001",
+            type=AssetType.video,
+            captured_at=base,
+            original_path="/tmp/live-video.mov",
+            original_bytes=10,
+            original_mime="video/quicktime",
+        )
+        still = Asset(
+            id="00000000-0000-0000-0000-000000009002",
+            type=AssetType.live_photo,
+            captured_at=base,
+            live_photo_video_id=video.id,
+            original_path="/tmp/live-still.jpg",
+            original_bytes=10,
+            original_mime="image/jpeg",
+        )
+        with self.session_factory() as db:
+            db.add_all([video, still])
+            db.commit()
+
+        response = self.client.get("/assets")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        ids = [item["id"] for item in body["items"]]
+        self.assertIn(still.id, ids)
+        self.assertNotIn(video.id, ids)
+
 
 if __name__ == "__main__":
     unittest.main()

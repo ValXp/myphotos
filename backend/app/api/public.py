@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import FileResponse
+from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.assets import (
@@ -62,6 +63,11 @@ def list_public_album_assets(
         .join(Asset, AlbumItem.asset_id == Asset.id)
         .filter(AlbumItem.album_id == share.album_id)
         .filter(Asset.gone.is_(False))
+        .filter(
+            ~Asset.id.in_(
+                select(Asset.live_photo_video_id).where(Asset.live_photo_video_id.isnot(None))
+            )
+        )
         .order_by(AlbumItem.order_index.asc(), AlbumItem.asset_id.asc())
         .all()
     )
