@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from datetime import datetime, timezone
 
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session, sessionmaker
@@ -57,8 +58,14 @@ def get_db(request: Request) -> Generator[Session, None, None]:
 
 
 def require_owner_session(
+    request: Request,
     owner_session: Session | None = Depends(get_owner_session),
+    config: Config = Depends(get_config),
 ) -> Session:
+    if config.app.disable_auth:
+        # Dev mode: treat all requests as an owner session.
+        return Session(id="dev", user_id="dev", created_at=datetime.now(timezone.utc))
+
     if owner_session is None:
         raise HTTPException(status_code=401, detail="owner session required")
     return owner_session

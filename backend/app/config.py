@@ -52,6 +52,9 @@ class AppConfig:
     trusted_proxy_ips: tuple[str, ...]
     frontend_dist_dir: Path | None
 
+    # Dev convenience: bypass auth (including passkeys). ONLY safe for local/private environments.
+    disable_auth: bool
+
 
 @dataclass(frozen=True)
 class SessionConfig:
@@ -123,6 +126,7 @@ class Config:
                     if self.app.frontend_dist_dir is not None
                     else None
                 ),
+                "disable_auth": self.app.disable_auth,
             },
             "session": {
                 "ttl_seconds": self.session.ttl_seconds,
@@ -166,6 +170,7 @@ def load_config(environ: Mapping[str, str] | None = None) -> Config:
             _csv_from_env(env, "TRUSTED_PROXY_IPS", DEFAULT_TRUSTED_PROXY_IPS)
         ),
         frontend_dist_dir=_optional_path_from_env(env, "FRONTEND_DIST_DIR"),
+        disable_auth=bool(env.get("DISABLE_AUTH", "0").strip() not in {"0", "false", "False"}),
     )
     default_origin = f"http://{app.host}:{app.port}"
     webauthn = WebAuthnConfig(
