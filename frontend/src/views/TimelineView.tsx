@@ -1034,34 +1034,29 @@ export function TimelineView() {
       </header>
 
       {viewerOpen && (
-        <div className="viewer-overlay" onClick={closeViewer} role="dialog" aria-modal="true">
-          <div className="viewer-overlay-panel" onClick={(event) => event.stopPropagation()}>
-            <button className="viewer-overlay-close ghost" onClick={closeViewer}>
-              Close
-            </button>
-            <ViewerShell
-              contextLabel="Owner timeline"
-              emptyMessage="No assets loaded."
-              emptySubhead="Pick an asset from the timeline."
-              items={items}
-              status={
-                status === "loading" || status === "loading-more"
-                  ? "loading"
-                  : status === "ready"
-                    ? "ready"
-                    : status === "error"
-                      ? "error"
-                      : "idle"
-              }
-              error={error}
-              nextCursor={nextCursor}
-              previewUrl={thumbnailUrl}
-              photoUrl={viewerPhotoUrl}
-              streamUrl={streamUrl}
-              liveUrl={liveVideoUrl}
-              showFooterNav={false}
-            />
-          </div>
+        <div className="viewer-overlay" role="dialog" aria-modal="true">
+          <ViewerShell
+            contextLabel="Owner timeline"
+            emptyMessage="No assets loaded."
+            emptySubhead="Pick an asset from the timeline."
+            items={items}
+            status={
+              status === "loading" || status === "loading-more"
+                ? "loading"
+                : status === "ready"
+                  ? "ready"
+                  : status === "error"
+                    ? "error"
+                    : "idle"
+            }
+            error={error}
+            nextCursor={nextCursor}
+            previewUrl={thumbnailUrl}
+            photoUrl={viewerPhotoUrl}
+            streamUrl={streamUrl}
+            liveUrl={liveVideoUrl}
+            onClose={closeViewer}
+          />
         </div>
       )}
 

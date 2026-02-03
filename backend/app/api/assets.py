@@ -54,6 +54,8 @@ def list_assets(
         .filter(Asset.gone.is_(False))
         .order_by(sort_ts.desc(), Asset.id.desc())
     )
+    live_video_ids = select(Asset.live_photo_video_id).where(Asset.live_photo_video_id.isnot(None))
+    query = query.filter(~Asset.id.in_(live_video_ids))
     start_dt = _normalize_datetime(start)
     end_dt = _normalize_datetime(end)
     if start_dt and end_dt and start_dt > end_dt:
