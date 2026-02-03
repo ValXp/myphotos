@@ -821,6 +821,7 @@ export function ViewerShell({
                   Next
                 </button>
               </div>
+              {isZoomable && (
               <div className="viewer-zoom">
                 <span className="viewer-zoom-label">Zoom</span>
                 <div className="viewer-zoom-buttons">
@@ -853,10 +854,11 @@ export function ViewerShell({
                   </button>
                 </div>
               </div>
+              )}
             </div>
           )}
         </div>
-        <div className={`viewer-media${isVideo ? " is-video" : ""}`}>
+        <div className={`viewer-media${isVideo ? " is-video" : ""}${controlsVisible ? " controls-visible" : " controls-hidden"}`}>
           {error && (
             <div className="status error viewer-status" role="alert">
               {error}
