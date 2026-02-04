@@ -554,6 +554,11 @@ button {
   flex: 1;
 }
 
+/* For photos, don't clip the rendered image if sizing goes slightly off in small landscape viewports. */
+.viewer-media:not(.is-video) {
+  overflow: visible;
+}
+
 .viewer-topbar {
   position: absolute;
   top: 0;
@@ -634,14 +639,19 @@ button {
 }
 
 .viewer-media-item {
-  /* For photos: avoid forcing both dimensions to 100% (can look like cropping on some viewports).
-     Let the intrinsic aspect ratio drive sizing, but constrain to the stage. */
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  display: block;
+}
+
+/* In viewer, photos should size by intrinsic ratio (avoid weird clipping in landscape). */
+.viewer-media img.viewer-media-item {
   width: auto;
   height: auto;
   max-width: 100%;
   max-height: 100%;
-  object-fit: contain;
-  display: block;
 }
 
 .viewer-media-video {
