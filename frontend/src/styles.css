@@ -864,6 +864,14 @@ button {
   transform: translateX(0);
 }
 
+/* When viewer controls are auto-hidden, hide hover arrows too. */
+.viewer-media.controls-hidden .viewer-arrow {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  transform: translateX(0) !important;
+}
+
 .viewer-arrow:disabled {
   opacity: 0;
   visibility: hidden;
