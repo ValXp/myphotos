@@ -564,6 +564,7 @@ export function AlbumDetailView() {
             error={error}
             previewUrl={thumbnailUrl}
             photoUrl={viewerPhotoUrl}
+            fullPhotoUrl={originalUrl}
             streamUrl={streamUrl}
             liveUrl={liveVideoUrl}
             onClose={closeViewer}

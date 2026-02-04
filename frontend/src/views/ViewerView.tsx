@@ -111,7 +111,8 @@ export function ViewerView() {
       error={error}
       nextCursor={nextCursor}
       previewUrl={previewUrl}
-      photoUrl={originalUrl}
+      photoUrl={previewUrl}
+      fullPhotoUrl={originalUrl}
       streamUrl={streamUrl}
       liveUrl={liveUrl}
       backLink={{ to: "/app/timeline", label: "Back to timeline" }}

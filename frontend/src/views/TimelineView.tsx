@@ -1126,6 +1126,7 @@ export function TimelineView() {
             nextCursor={nextCursor}
             previewUrl={thumbnailUrl}
             photoUrl={viewerPhotoUrl}
+            fullPhotoUrl={originalUrl}
             streamUrl={streamUrl}
             liveUrl={liveVideoUrl}
             onClose={closeViewer}

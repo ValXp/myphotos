@@ -60,6 +60,7 @@ type ViewerShellProps = {
   nextCursor?: string | null;
   previewUrl: (assetId: string) => string;
   photoUrl?: (assetId: string) => string;
+  fullPhotoUrl?: (assetId: string) => string;
   streamUrl: (assetId: string) => string;
   liveUrl?: (assetId: string) => string;
   backLink?: {
@@ -144,6 +145,7 @@ export function ViewerShell({
   nextCursor = null,
   previewUrl,
   photoUrl,
+  fullPhotoUrl,
   streamUrl,
   liveUrl,
   backLink,
@@ -162,6 +164,7 @@ export function ViewerShell({
   const [controlsVisible, setControlsVisible] = useState(true);
   const [controlsPinned, setControlsPinned] = useState(false);
   const [durationOverrides, setDurationOverrides] = useState<Record<string, number>>({});
+  const [fullPhotoSrc, setFullPhotoSrc] = useState<string | null>(null);
 
   const viewableItems = useMemo(() => {
     const companionIds = new Set<string>();
@@ -214,6 +217,49 @@ export function ViewerShell({
   useEffect(() => {
     setIsLivePlaying(false);
   }, [selectedAssetId]);
+
+  // Progressive photo loading: show thumbnail first, then swap to full-resolution once loaded.
+  useEffect(() => {
+    setFullPhotoSrc(null);
+
+    const asset = selectedAssetId ? viewableItems.find((it) => it.id === selectedAssetId) : null;
+    if (!asset) {
+      return;
+    }
+    if (asset.type !== "photo" && asset.type !== "live_photo") {
+      return;
+    }
+    if (!fullPhotoUrl) {
+      return;
+    }
+
+    const fullSrc = fullPhotoUrl(asset.id);
+    if (!fullSrc) {
+      return;
+    }
+
+    let cancelled = false;
+    const img = new Image();
+    img.decoding = "async";
+    img.loading = "eager";
+
+    img.onload = () => {
+      if (cancelled) return;
+      setFullPhotoSrc(fullSrc);
+    };
+    img.onerror = () => {
+      // Keep thumbnail; ignore.
+    };
+
+    // Start download.
+    img.src = fullSrc;
+
+    return () => {
+      cancelled = true;
+      // Best-effort stop.
+      img.src = "";
+    };
+  }, [fullPhotoUrl, selectedAssetId, viewableItems]);
 
   const clearHideTimer = useCallback(() => {
     if (hideTimerRef.current !== null) {
@@ -375,9 +421,10 @@ export function ViewerShell({
   const durationLabel = selectedAsset ? formatDuration(resolvedDurationMs, selectedAsset.type) : null;
   const previewAlt = selectedAsset ? `${typeLabel} preview from ${dateLabel}` : "Viewer preview";
   const videoLabel = selectedAsset ? `${typeLabel} playback from ${dateLabel}` : "Video playback";
-  const photoSource = selectedAsset
+  const thumbPhotoSource = selectedAsset
     ? (photoUrl ? photoUrl(selectedAsset.id) : previewUrl(selectedAsset.id))
     : "";
+  const photoSource = fullPhotoSrc || thumbPhotoSource;
   const posterSource = selectedAsset ? previewUrl(selectedAsset.id) : "";
 
   const videoSource = selectedAsset && isVideo ? streamUrl(selectedAsset.id) : "";

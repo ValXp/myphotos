@@ -66,6 +66,12 @@ function publicLiveUrl(token: string, assetId: string): string {
   return buildApiUrl(`/public/shares/${safeToken}/assets/${safeId}/live`);
 }
 
+function publicOriginalUrl(token: string, assetId: string): string {
+  const safeToken = encodeURIComponent(token);
+  const safeId = encodeURIComponent(assetId);
+  return buildApiUrl(`/public/shares/${safeToken}/assets/${safeId}/original`);
+}
+
 export function PublicViewerView() {
   const { token } = useParams();
   const [items, setItems] = useState<ViewerAsset[]>([]);
@@ -114,6 +120,11 @@ export function PublicViewerView() {
     [token]
   );
 
+  const fullPhotoBuilder = useCallback(
+    (assetId: string) => (token ? publicOriginalUrl(token, assetId) : ""),
+    [token]
+  );
+
   const backLink = token
     ? { to: `/share/${encodeURIComponent(token)}`, label: "Back to album" }
     : undefined;
@@ -128,6 +139,8 @@ export function PublicViewerView() {
       status={status}
       error={error}
       previewUrl={thumbBuilder}
+      photoUrl={thumbBuilder}
+      fullPhotoUrl={fullPhotoBuilder}
       streamUrl={streamBuilder}
       liveUrl={liveBuilder}
       backLink={backLink}
