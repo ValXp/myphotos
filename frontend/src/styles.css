@@ -698,15 +698,7 @@ button {
   height: 100%;
 }
 
-/* Use cover for landscape photos in landscape viewports (fills screen). Portrait photos remain contain. */
-@media (orientation: landscape) {
-  .viewer-media img.viewer-media-item.is-landscape {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    object-position: center;
-  }
-}
+/* Keep photos fully visible (no cropping): always contain. */
 
 .viewer-live-photo .viewer-media-item {
   position: absolute;

@@ -851,11 +851,7 @@ export function ViewerShell({
               ) : isLivePhoto ? (
                 <div className={`viewer-live-photo${isLivePlaying ? " is-playing" : ""}`}>
                   <img
-                    className={`viewer-media-item viewer-media-photo viewer-live-still${
-                      selectedAsset?.width && selectedAsset?.height && selectedAsset.width > selectedAsset.height
-                        ? " is-landscape"
-                        : ""
-                    }`}
+                    className="viewer-media-item viewer-media-photo viewer-live-still"
                     src={photoSource}
                     alt={previewAlt}
                   />
@@ -875,11 +871,7 @@ export function ViewerShell({
                 </div>
               ) : (
                 <img
-                  className={`viewer-media-item viewer-media-photo${
-                    selectedAsset?.width && selectedAsset?.height && selectedAsset.width > selectedAsset.height
-                      ? " is-landscape"
-                      : ""
-                  }`}
+                  className="viewer-media-item viewer-media-photo"
                   src={photoSource}
                   alt={previewAlt}
                 />
