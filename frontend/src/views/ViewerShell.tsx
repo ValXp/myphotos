@@ -3,8 +3,6 @@ import { Link, useSearchParams } from "react-router-dom";
 import videojs from "video.js";
 import "video.js/dist/video-js.css";
 
-const ZOOM_LEVELS = [1, 1.5, 2, 3];
-const DEFAULT_ZOOM_INDEX = 0;
 const CONTROLS_HIDE_DELAY_MS = 10_000;
 
 let qualityLevelsPromise: Promise<void> | null = null;
@@ -142,7 +140,6 @@ export function ViewerShell({
   onClose,
   showFooterNav = true
 }: ViewerShellProps) {
-  const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedAssetId = searchParams.get("asset");
   const videoContainerRef = useRef<HTMLDivElement | null>(null);
@@ -202,9 +199,7 @@ export function ViewerShell({
     );
   }, [paramIndex, selectedAssetId, setSearchParams, viewableItems]);
 
-  useEffect(() => {
-    setZoomIndex(DEFAULT_ZOOM_INDEX);
-  }, [selectedAssetId]);
+  // zoom UI removed; rely on native browser gestures/zoom.
 
   useEffect(() => {
     setIsLivePlaying(false);
@@ -355,12 +350,7 @@ export function ViewerShell({
   const canNext = selectedIndex >= 0 && selectedIndex < viewableItems.length - 1;
   const isVideo = selectedAsset?.type === "video";
   const isLivePhoto = selectedAsset?.type === "live_photo";
-  const isZoomable = !!selectedAsset && !isVideo;
-  const zoom = ZOOM_LEVELS[zoomIndex] ?? ZOOM_LEVELS[DEFAULT_ZOOM_INDEX];
-  const canZoomIn = isZoomable && zoomIndex < ZOOM_LEVELS.length - 1;
-  const canZoomOut = isZoomable && zoomIndex > 0;
-  const canResetZoom = isZoomable && zoomIndex !== DEFAULT_ZOOM_INDEX;
-  const zoomLabel = `${Math.round(zoom * 100)}%`;
+  // zoom removed
 
   const hasLivePair = !!selectedAsset?.live_photo_video_id;
   const liveReady = !!selectedAsset?.ready?.live;
@@ -724,17 +714,7 @@ export function ViewerShell({
     }
   }, [isLivePlaying, selectedAsset?.id]);
 
-  const handleZoomIn = useCallback(() => {
-    setZoomIndex((index) => Math.min(index + 1, ZOOM_LEVELS.length - 1));
-  }, []);
-
-  const handleZoomOut = useCallback(() => {
-    setZoomIndex((index) => Math.max(index - 1, 0));
-  }, []);
-
-  const handleZoomReset = useCallback(() => {
-    setZoomIndex(DEFAULT_ZOOM_INDEX);
-  }, []);
+  // Zoom controls removed.
 
   const handleToggleLive = useCallback(() => {
     if (!canPlayLive) {
@@ -784,9 +764,7 @@ export function ViewerShell({
                 {backLink.label}
               </Link>
             )}
-            <div className="viewer-topbar-meta">
-              <span className="viewer-topbar-title">{dateLabel}</span>
-            </div>
+            <span className="viewer-topbar-title">{dateLabel}</span>
           </div>
           {showFooterNav && (
             <div className="viewer-topbar-center">
@@ -809,51 +787,12 @@ export function ViewerShell({
                   >
                     {isLivePlaying ? "Stop Live" : "Play Live"}
                   </button>
-                  {!canPlayLive && <span className="hint viewer-live-hint">Live video processing</span>}
+                  {!canPlayLive && (
+                    <span className="hint viewer-live-hint">Live video processing</span>
+                  )}
                 </>
               )}
-              <div className="viewer-nav">
-                <button className="ghost" onClick={handlePrev} disabled={!canPrev}>
-                  Prev
-                </button>
-                <button className="ghost" onClick={handleNext} disabled={!canNext}>
-                  Next
-                </button>
-              </div>
-              {isZoomable && (
-              <div className="viewer-zoom">
-                <span className="viewer-zoom-label">Zoom</span>
-                <div className="viewer-zoom-buttons">
-                  <button
-                    className="ghost viewer-zoom-btn"
-                    onClick={handleZoomOut}
-                    disabled={!canZoomOut}
-                    aria-label="Zoom out"
-                  >
-                    -
-                  </button>
-                  <span className="viewer-zoom-value" aria-live="polite">
-                    {zoomLabel}
-                  </span>
-                  <button
-                    className="ghost viewer-zoom-btn"
-                    onClick={handleZoomIn}
-                    disabled={!canZoomIn}
-                    aria-label="Zoom in"
-                  >
-                    +
-                  </button>
-                  <button
-                    className="ghost viewer-zoom-btn"
-                    onClick={handleZoomReset}
-                    disabled={!canResetZoom}
-                    aria-label="Reset zoom"
-                  >
-                    Fit
-                  </button>
-                </div>
-              </div>
-              )}
+              {/* Prev/Next buttons removed: hover arrows + keyboard arrows handle navigation. */}
             </div>
           )}
         </div>
@@ -880,10 +819,9 @@ export function ViewerShell({
               ) : isLivePhoto ? (
                 <div className={`viewer-live-photo${isLivePlaying ? " is-playing" : ""}`}>
                   <img
-                    className={`viewer-media-item viewer-media-photo viewer-live-still${zoomIndex > 0 ? " is-zoomed" : ""}`}
+                    className="viewer-media-item viewer-media-photo viewer-live-still"
                     src={photoSource}
                     alt={previewAlt}
-                    style={{ transform: `scale(${zoom})` }}
                   />
                   {showLiveToggle && liveReady && (
                     <video
@@ -896,16 +834,14 @@ export function ViewerShell({
                       preload="metadata"
                       src={liveSource}
                       aria-hidden="true"
-                      style={{ transform: `scale(${zoom})` }}
                     />
                   )}
                 </div>
               ) : (
                 <img
-                  className={`viewer-media-item viewer-media-photo${zoomIndex > 0 ? " is-zoomed" : ""}`}
+                  className="viewer-media-item viewer-media-photo"
                   src={photoSource}
                   alt={previewAlt}
-                  style={{ transform: `scale(${zoom})` }}
                 />
               )}
               {/* type/duration pills intentionally not shown in viewer */}

@@ -559,8 +559,7 @@ button {
   top: 0;
   left: 0;
   right: 0;
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  display: flex;
   align-items: center;
   gap: 12px;
   padding: 16px 24px;
@@ -584,7 +583,7 @@ button {
 }
 
 .viewer-topbar-left {
-  flex: 1;
+  flex: 0 0 auto;
   min-width: 0;
 }
 
@@ -596,59 +595,25 @@ button {
 .viewer-topbar-right {
   flex: 1;
   justify-content: flex-end;
-  flex-wrap: wrap;
 }
 
 @media (max-width: 520px) {
   .viewer-topbar {
     grid-template-columns: 1fr;
-    grid-template-rows: auto auto;
-    align-items: start;
     padding: 12px 12px;
   }
 
-  .viewer-topbar-center {
-    order: 3;
-    justify-content: flex-start;
-  }
-
+  .viewer-topbar-left,
+  .viewer-topbar-center,
   .viewer-topbar-right {
-    order: 2;
     justify-content: flex-start;
   }
-
-  .viewer-topbar-left {
-    order: 1;
-    flex-wrap: wrap;
-  }
-
-  .viewer-topbar-meta {
-    width: 100%;
-  }
-
-  .viewer-nav {
-    flex-wrap: wrap;
-  }
-}
-
-.viewer-topbar-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
 }
 
 .viewer-topbar-title {
   font-size: 0.95rem;
   font-weight: 600;
   color: #fff;
-}
-
-.viewer-topbar-subtitle {
-  font-size: 0.7rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.65);
 }
 
 .viewer-topbar .ghost {
@@ -661,9 +626,7 @@ button {
   opacity: 0.5;
 }
 
-.viewer-topbar .viewer-zoom-label {
-  color: rgba(255, 255, 255, 0.6);
-}
+/* zoom UI removed */
 
 .viewer-live-hint {
   color: rgba(255, 255, 255, 0.65);
@@ -734,11 +697,7 @@ button {
 }
 
 .viewer-media-photo {
-  cursor: zoom-in;
-}
-
-.viewer-media-photo.is-zoomed {
-  cursor: zoom-out;
+  cursor: default;
 }
 
 .viewer-media.is-video .viewer-duration {
@@ -746,52 +705,14 @@ button {
   bottom: auto;
 }
 
-.viewer-nav {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
+/* prev/next buttons removed; hover arrows + keyboard arrows handle navigation */
 
 .viewer-count {
   color: rgba(255, 255, 255, 0.7);
   font-size: 0.9rem;
 }
 
-.viewer-zoom {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.viewer-zoom-label {
-  color: var(--muted);
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
-}
-
-.viewer-zoom-buttons {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.viewer-zoom-btn {
-  padding: 6px 12px;
-}
-
-.viewer-zoom-value {
-  min-width: 56px;
-  text-align: center;
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
-  font-size: 0.85rem;
-  font-weight: 600;
-}
+/* zoom UI removed */
 
 /* video.js inline quality selector */
 .vjs-quality-select {
