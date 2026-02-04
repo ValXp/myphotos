@@ -549,12 +549,11 @@ button {
   border-radius: 0;
   background: #000;
   overflow: hidden;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex: 1;
 }
-
-/* Keep overflow hidden so photos can't appear cropped by container math; rely on object-fit contain. */
 
 .viewer-topbar {
   position: absolute;
@@ -636,17 +635,21 @@ button {
 }
 
 .viewer-media-item {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  object-position: center;
   display: block;
 }
 
-/* Ensure photos always contain within the stage (no cropping in landscape). */
+/* Default: media should never exceed the viewer stage. */
+.viewer-media-item {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+/* Photos: size by intrinsic aspect ratio and fit within the stage. */
 .viewer-media img.viewer-media-item {
-  width: 100%;
-  height: 100%;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
   object-position: center;
 }
@@ -654,6 +657,11 @@ button {
 .viewer-media-video {
   width: 100%;
   height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
 }
 
 .viewer-media-video .video-js,
