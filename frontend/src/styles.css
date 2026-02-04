@@ -1174,6 +1174,14 @@ button.danger:hover {
   font-size: 0.85rem;
 }
 
+.build-stamp {
+  margin-top: 28px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(29, 28, 26, 0.08);
+  color: rgba(91, 87, 81, 0.8);
+  font-size: 0.75rem;
+}
+
 button:disabled {
   opacity: 0.6;
   cursor: not-allowed;

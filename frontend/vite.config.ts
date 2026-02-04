@@ -1,9 +1,24 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { configDefaults } from "vitest/config";
+import { execSync } from "node:child_process";
+
+const buildTime = new Date().toISOString();
+let gitSha = "unknown";
+try {
+  gitSha = execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] })
+    .toString()
+    .trim();
+} catch {
+  // ignore
+}
 
 export default defineConfig({
   plugins: [react()],
+  define: {
+    __BUILD_TIME__: JSON.stringify(buildTime),
+    __GIT_SHA__: JSON.stringify(gitSha)
+  },
   build: {
     outDir: "dist"
   },

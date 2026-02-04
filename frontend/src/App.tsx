@@ -30,6 +30,15 @@ function AuthGate() {
   return <Outlet />;
 }
 
+function BuildStamp() {
+  // Defined at build time by Vite (see vite.config.ts)
+  return (
+    <div className="build-stamp" aria-label="Build information">
+      Build {__BUILD_TIME__} ({__GIT_SHA__})
+    </div>
+  );
+}
+
 function OwnerLayout() {
   const { signOut } = useAuth();
 
@@ -63,6 +72,7 @@ function OwnerLayout() {
       </header>
       <main className="content">
         <Outlet />
+        <BuildStamp />
       </main>
     </div>
   );
@@ -85,6 +95,7 @@ function PublicLayout() {
       </header>
       <main className="public-content">
         <Outlet />
+        <BuildStamp />
       </main>
     </div>
   );
