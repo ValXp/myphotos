@@ -14,6 +14,7 @@ fs.mkdirSync(OUT_DIR, { recursive: true });
 
 let viewports = [
   { name: "desktop-1440x900", width: 1440, height: 900 },
+  { name: "laptop-1280x720", width: 1280, height: 720 },
   { name: "tablet-768x1024-portrait", width: 768, height: 1024 },
   { name: "tablet-1024x768-landscape", width: 1024, height: 768 },
   { name: "phone-390x844-portrait", width: 390, height: 844 },
