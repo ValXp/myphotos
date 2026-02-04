@@ -554,10 +554,7 @@ button {
   flex: 1;
 }
 
-/* For photos, don't clip the rendered image if sizing goes slightly off in small landscape viewports. */
-.viewer-media:not(.is-video) {
-  overflow: visible;
-}
+/* Keep overflow hidden so photos can't appear cropped by container math; rely on object-fit contain. */
 
 .viewer-topbar {
   position: absolute;
@@ -646,12 +643,12 @@ button {
   display: block;
 }
 
-/* In viewer, photos should size by intrinsic ratio (avoid weird clipping in landscape). */
+/* Ensure photos always contain within the stage (no cropping in landscape). */
 .viewer-media img.viewer-media-item {
-  width: auto;
-  height: auto;
-  max-width: 100%;
-  max-height: 100%;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
 }
 
 .viewer-media-video {
