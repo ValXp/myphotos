@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import videojs from "video.js";
 import "video.js/dist/video-js.css";
 
-const CONTROLS_HIDE_DELAY_MS = 10_000;
+const CONTROLS_HIDE_DELAY_MS = 5_000;
 
 let qualityLevelsPromise: Promise<void> | null = null;
 
@@ -105,6 +105,16 @@ function formatDuration(durationMs: number | null, type: AssetType): string | nu
     return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   }
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function formatQualityLabel(height: number | undefined, isHdr: boolean): string {
+  if (!height || !Number.isFinite(height)) {
+    return isHdr ? "HDR" : "";
+  }
+  if (height >= 2160) {
+    return isHdr ? "4K HDR" : "4K";
+  }
+  return isHdr ? `${height}p HDR` : `${height}p`;
 }
 
 function formatTypeLabel(type: AssetType): string {
@@ -505,14 +515,32 @@ export function ViewerShell({
             player.removeClass("vjs-quality-focus");
           };
 
-          select.addEventListener("focus", keepControlsVisible);
-          select.addEventListener("blur", releaseControls);
-          select.addEventListener("pointerdown", keepControlsVisible);
-          select.addEventListener("pointerup", keepControlsVisible);
+          let qualityUiLocked = false;
+
+          const lockQualityUi = () => {
+            qualityUiLocked = true;
+            keepControlsVisible();
+          };
+
+          const unlockQualityUi = () => {
+            // Slight delay so Firefox doesn't flap focus during click.
+            window.setTimeout(() => {
+              qualityUiLocked = false;
+              releaseControls();
+            }, 150);
+          };
+
+          select.addEventListener("focus", lockQualityUi);
+          select.addEventListener("blur", unlockQualityUi);
+          select.addEventListener("pointerdown", lockQualityUi);
+          select.addEventListener("pointerup", lockQualityUi);
 
           let autoOpt: HTMLOptionElement | null = null;
 
           const rebuildOptions = () => {
+            if (qualityUiLocked) {
+              return;
+            }
             const previous = select.value || "auto";
 
             type LevelInfo = {
@@ -551,9 +579,10 @@ export function ViewerShell({
             for (const lvl of sorted) {
               const h = lvl.height as number;
               const vr = (lvl.videoRange || "").toUpperCase();
+              const isHdr = !!vr;
               const opt = document.createElement("option");
               opt.value = String(lvl.index);
-              opt.textContent = vr ? `${h}p HDR` : `${h}p`;
+              opt.textContent = formatQualityLabel(h, isHdr);
               select.appendChild(opt);
             }
 
@@ -564,6 +593,9 @@ export function ViewerShell({
 
           const updateAutoLabel = () => {
             if (!autoOpt) {
+              return;
+            }
+            if (qualityUiLocked) {
               return;
             }
             if (select.value !== "auto") {
@@ -577,7 +609,7 @@ export function ViewerShell({
               const height = media?.attributes?.RESOLUTION?.height;
               const vr = (media?.attributes?.["VIDEO-RANGE"] || "").toUpperCase();
               if (typeof height === "number") {
-                autoOpt.textContent = vr ? `Auto (${height}p HDR)` : `Auto (${height}p)`;
+                autoOpt.textContent = `Auto (${formatQualityLabel(height, !!vr)})`;
               } else {
                 autoOpt.textContent = "Auto";
               }
@@ -819,7 +851,11 @@ export function ViewerShell({
               ) : isLivePhoto ? (
                 <div className={`viewer-live-photo${isLivePlaying ? " is-playing" : ""}`}>
                   <img
-                    className="viewer-media-item viewer-media-photo viewer-live-still"
+                    className={`viewer-media-item viewer-media-photo viewer-live-still${
+                      selectedAsset?.width && selectedAsset?.height && selectedAsset.width > selectedAsset.height
+                        ? " is-landscape"
+                        : ""
+                    }`}
                     src={photoSource}
                     alt={previewAlt}
                   />
@@ -839,7 +875,11 @@ export function ViewerShell({
                 </div>
               ) : (
                 <img
-                  className="viewer-media-item viewer-media-photo"
+                  className={`viewer-media-item viewer-media-photo${
+                    selectedAsset?.width && selectedAsset?.height && selectedAsset.width > selectedAsset.height
+                      ? " is-landscape"
+                      : ""
+                  }`}
                   src={photoSource}
                   alt={previewAlt}
                 />

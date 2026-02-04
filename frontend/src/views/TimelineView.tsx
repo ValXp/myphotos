@@ -451,6 +451,7 @@ export function TimelineView() {
   const [overview, setOverview] = useState<OverviewPayload | null>(null);
   const [liveUpdates, setLiveUpdates] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [durationOverrides, setDurationOverrides] = useState<Record<string, number>>({});
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const inFlightRef = useRef(false);
   const { registerVideoRef, handleMouseEnter, handleMouseLeave } = useLivePhotoHover();
@@ -693,6 +694,78 @@ export function TimelineView() {
     }, 5000);
     return () => window.clearInterval(interval);
   }, [fetchOverview, liveUpdates]);
+
+  // Best-effort: populate missing video durations client-side once streams are available.
+  useEffect(() => {
+    if (items.length === 0) {
+      return;
+    }
+    let cancelled = false;
+
+    const missing = items.filter(
+      (asset) =>
+        asset.type === "video" &&
+        (!!asset.ready?.stream || asset.processing?.transcode === "done") &&
+        (!asset.duration_ms || asset.duration_ms <= 0) &&
+        durationOverrides[asset.id] === undefined
+    );
+
+    if (missing.length === 0) {
+      return;
+    }
+
+    const controllers: Array<() => void> = [];
+
+    for (const asset of missing.slice(0, 6)) {
+      const video = document.createElement("video");
+      video.preload = "metadata";
+      video.muted = true;
+      video.playsInline = true;
+
+      const handle = () => {
+        const durationSeconds = video.duration;
+        if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+          return;
+        }
+        const durationMs = Math.round(durationSeconds * 1000);
+        if (!cancelled) {
+          setDurationOverrides((prev) => {
+            if (prev[asset.id] === durationMs) {
+              return prev;
+            }
+            return { ...prev, [asset.id]: durationMs };
+          });
+        }
+      };
+
+      video.addEventListener("loadedmetadata", handle);
+      video.addEventListener("durationchange", handle);
+
+      // HLS VOD should provide duration; if not, ignore.
+      try {
+        video.src = streamUrl(asset.id);
+      } catch {
+        // ignore
+      }
+
+      controllers.push(() => {
+        video.removeEventListener("loadedmetadata", handle);
+        video.removeEventListener("durationchange", handle);
+        try {
+          video.src = "";
+        } catch {
+          // ignore
+        }
+      });
+    }
+
+    return () => {
+      cancelled = true;
+      for (const cleanup of controllers) {
+        cleanup();
+      }
+    };
+  }, [durationOverrides, items]);
 
   const runScan = useCallback(async () => {
     setIsScanning(true);
@@ -1123,7 +1196,8 @@ export function TimelineView() {
             const dateLabel = formatDateLabel(asset);
             const timeLabel = formatTimeLabel(asset);
             const dimensionLabel = formatDimensions(asset);
-            const durationLabel = formatDuration(asset.duration_ms, asset.type);
+            const resolvedDurationMs = durationOverrides[asset.id] ?? asset.duration_ms;
+            const durationLabel = formatDuration(resolvedDurationMs, asset.type);
             const metaParts = [timeLabel, dimensionLabel, durationLabel].filter(
               (value): value is string => !!value
             );
